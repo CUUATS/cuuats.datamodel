@@ -18,6 +18,10 @@ def require_source(fn):
 
 
 class BaseFeature(object):
+    """
+    Base class used to interact with data stored in a geodatabase feature
+    class.
+    """
 
     name = None
     source = None
@@ -48,6 +52,10 @@ class BaseFeature(object):
 
     @classmethod
     def get_fields(cls):
+        """
+        Returns an OrderedDict containing the fields for this feature.
+        """
+
         fields = []
         # Walk the inheritance chain looking for fields.
         for subcls in type.mro(cls):
@@ -59,6 +67,10 @@ class BaseFeature(object):
     @classmethod
     @require_source
     def iter(cls, update=True, where_clause=None):
+        """
+        Create a generator used to iterate over features in this class.
+        """
+
         field_names = cls.get_fields().keys()
         for (row, cursor) in cls.source.iter_rows(
                 cls.name, field_names, update, where_clause):
@@ -153,6 +165,11 @@ class BaseFeature(object):
         pass
 
     def validate(self):
+        """
+        Perform validation on each field in the feature, and return any
+        validation error messages.
+        """
+
         messages = []
         for (field_name, field) in self.fields.items():
             value = getattr(self, field_name)
@@ -168,9 +185,18 @@ class BaseFeature(object):
         return messages
 
     def serialize(self):
+        """
+        Return a list of values for the fields in this feature.
+        """
+
         return [self.values.get(f, None) for f in self.fields.keys()]
 
     def update(self):
+        """
+        Update the corresponding row in the data source. Requires an active
+        update cursor.
+        """
+
         if self.source is None:
             raise NotImplementedError(
                 'Cannot update features without an active update cursor')
