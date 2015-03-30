@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, NumericField
+from cuuats.datamodel.fields import BaseField, NumericField, CalculatedField
 from cuuats.datamodel.attachments import AttachmentRelationship
 
 
@@ -74,7 +74,7 @@ class BaseFeature(object):
         field_names = cls.get_fields().keys()
         for (row, cursor) in cls.source.iter_rows(
                 cls.name, field_names, update, where_clause):
-            feature = cls(row)
+            feature = cls(**dict(zip(field_names, row)))
             feature.cursor = cursor
             yield feature
             feature.cursor = None
@@ -95,21 +95,19 @@ class BaseFeature(object):
                 field.min, field.max = domain.range
 
     @require_source
-    def __init__(self, values=[], **kwargs):
+    def __init__(self, **kwargs):
         self.fields = self.__class__.get_fields()
-        if len(values) > 0 and len(kwargs) > 0:
-            raise ValueError('Feature field values must be given as either '
-                             'a list or keyword arguments')
+        for field_name in kwargs.keys():
+            if field_name not in self.fields.keys():
+                raise KeyError('Invalid field name: %s' % (field_name))
 
-        if len(kwargs) > 0:
-            values = [kwargs[f] for f in self.fields.keys() if f in kwargs]
-
-        if len(values) > 0 and len(values) != len(self.fields.keys()):
-            raise ValueError('Number of field values provided does not match '
-                             'the number of fields')
-
-        self.values = dict(zip(self.fields.keys(), values))
+        self.values = kwargs
         self.cursor = None
+
+        # Trigger the value changed event for all fields that were set
+        # in order to update calculated fields.
+        for field_name in kwargs.keys():
+            self._field_value_changed(field_name)
 
     def __repr__(self):
         name = self.name or '(unregistered)'
@@ -201,3 +199,14 @@ class BaseFeature(object):
             raise NotImplementedError(
                 'Cannot update features without an active update cursor')
         self.source.update_row(self.cursor, self.serialize())
+
+    def _field_value_changed(self, field_name):
+        """
+        Event handler triggered when a field value is changed.
+        """
+
+        # Update calculated fields that are tied to the changed value.
+        for field in self.fields.values():
+            if isinstance(field, CalculatedField) and (
+                    not field.update_for or field_name in field.update_for):
+                field.update(self)

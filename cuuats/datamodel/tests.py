@@ -5,8 +5,9 @@ import tempfile
 import unittest
 from cuuats.datamodel.sources import DataSource
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
-    StringField, NumericField
+    StringField, NumericField, ScaleField
 from cuuats.datamodel.features import BaseFeature
+from cuuats.datamodel.scales import BreaksScale
 
 
 class TestFields(unittest.TestCase):
@@ -27,6 +28,9 @@ class TestFields(unittest.TestCase):
 
             def get_field(self, field_name):
                 return self.__class__.__dict__[field_name]
+
+            def _field_value_changed(self, field_name):
+                pass
 
         self.inst_a = MyFeatureClass()
         self.inst_b = MyFeatureClass()
@@ -92,11 +96,12 @@ class SourceFeatureMixin(object):
         ('widget_name', 'TEXT', 100, None),
         ('widget_number', 'LONG', None, None),
         ('widget_available', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
+        ('widget_number_score', 'DOUBLE', None, None),
     )
     FEATURE_CLASS_DATA = (
-        ('Widget A+ Awesome', 12345, 100, (2.5, 3.0)),
-        ('B-Widgety Widget', None, 50, (-2.0, 5.5)),
-        ('My Widget C', None, None, (0.0, 4.0)),
+        ('Widget A+ Awesome', 12345, 100, None, (2.5, 3.0)),
+        ('B-Widgety Widget', None, 50, None, (-2.0, 5.5)),
+        ('My Widget C', None, None, None, (0.0, 4.0)),
     )
 
     def setUp(self):
@@ -146,6 +151,11 @@ class SourceFeatureMixin(object):
             widget_number = NumericField('Widget Number', required=True)
             widget_available = NumericField('Is Widget Available?',
                                             required=True)
+            widget_number_score = ScaleField(
+                'Widget Number Score',
+                scale=BreaksScale([100, 500, 1000], [1, 2, 3, 4]),
+                value_field='widget_number',
+            )
             Shape = GeometryField('Shape')
 
         self.cls = Widget
@@ -260,7 +270,7 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
 
     def test_get_fields(self):
         field_names = ['OBJECTID', 'widget_name', 'widget_number',
-                       'widget_available', 'Shape']
+                       'widget_available', 'widget_number_score', 'Shape']
         self.assertEqual(self.cls.get_fields().keys(), field_names)
 
         del self.cls.widget_name
@@ -283,9 +293,6 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
             self.assertTrue(feature.cursor is not None)
             self.assertTrue(feature.widget_name in widget_names)
 
-    def test_init(self):
-        pass
-
     def test_get_field(self):
         with self.assertRaises(KeyError):
             self.instance.get_field('NotAField')
@@ -301,11 +308,41 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertEqual(
             self.instance.get_description_for('widget_available'), 'No')
 
-    def test_validate(self):
-        pass
+    def test_field_value_changed(self):
+        self.assertEqual(self.instance.widget_number_score, 2)
+        self.instance.widget_number = 800
+        self.assertEqual(
+            self.instance.widget_number_score, 3,
+            'Calculated field not updated')
 
-    def test_update(self):
-        pass
+
+class TestBreaksScale(unittest.TestCase):
+
+    def setUp(self):
+        self.breaks_right = BreaksScale([5, 10, 15, 20], [1, 2, 3, 4, 5])
+        self.breaks_left = BreaksScale([5, 10, 15, 20], [1, 2, 3, 4, 5], False)
+
+    def test_init(self):
+        with self.assertRaises(ValueError):
+            BreaksScale([5, 20, 15], [4, 3, 2, 1])
+
+        with self.assertRaises(IndexError):
+            BreaksScale([5, 10, 15], [3, 2, 1])
+
+    def test_score_right(self):
+        self.assertEqual(self.breaks_right.score(-10), 1)
+        self.assertEqual(self.breaks_right.score(5), 1)
+        self.assertEqual(self.breaks_right.score(6), 2)
+        self.assertEqual(self.breaks_right.score(20), 4)
+        self.assertEqual(self.breaks_right.score(100), 5)
+
+    def test_score_left(self):
+        self.assertEqual(self.breaks_left.score(-10), 1)
+        self.assertEqual(self.breaks_left.score(5), 2)
+        self.assertEqual(self.breaks_left.score(6), 2)
+        self.assertEqual(self.breaks_left.score(19), 4)
+        self.assertEqual(self.breaks_left.score(20), 5)
+        self.assertEqual(self.breaks_left.score(100), 5)
 
 if __name__ == '__main__':
     unittest.main()
