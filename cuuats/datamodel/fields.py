@@ -13,6 +13,7 @@ class BaseField(object):
         self.required_if = kwargs.get('required_if', None)
         self.domain_name = kwargs.get('domain_name', None)
         self.choices = list(kwargs.get('choices', []))
+        self.storage = self.default_storage.copy()
         self.storage.update(kwargs.get('storage', {}))
 
         # Handle field ordering
@@ -110,6 +111,7 @@ class StringField(BaseField):
 class NumericField(BaseField):
 
     default_storage = {
+        'field_type': 'FLOAT',
     }
 
     def __init__(self, name, **kwargs):
