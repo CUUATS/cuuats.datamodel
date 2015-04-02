@@ -1,3 +1,4 @@
+import warnings
 from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, NumericField, CalculatedField
 from cuuats.datamodel.attachments import AttachmentRelationship
@@ -45,10 +46,10 @@ class BaseFeature(object):
         for (field_name, field) in cls.get_fields().items():
             layer_field = layer_fields.get(field_name, None)
             if layer_field is None:
-                raise KeyError('%s is not a field of %s' % (
+                warnings.warn('%s is not a field of %s' % (
                     field_name, layer_name))
-
-            cls._init_field(field_name, field, layer_field)
+            else:
+                cls._init_field(field_name, field, layer_field)
 
     @classmethod
     def get_fields(cls):
@@ -93,6 +94,39 @@ class BaseFeature(object):
                 field.choices.extend(domain.codedValues)
             elif isinstance(field, NumericField):
                 field.min, field.max = domain.range
+
+    @classmethod
+    @require_source
+    def sync_fields(cls, modify=False, remove=False):
+        """
+        Adds (and optionally, modify or removes) database fields to match
+        those defined in this feature class.
+        """
+
+        if modify or remove:
+            raise NotImplemented('Modification and removal of fields are not '
+                                 'yet supported')
+
+        cls_fields = cls.get_fields()
+        layer_fields = cls.source.get_layer_fields(cls.name)
+        added_fields = []
+
+        for (field_name, field) in cls_fields.items():
+            if field_name not in layer_fields and field.storage:
+                storage = field.storage
+                if 'field_alias' not in storage:
+                    storage['field_alias'] = field.label
+                cls.source.add_field(cls.name, field_name, storage)
+                added_fields.append(field_name)
+
+        # Reload layer fields to get the newly added fields.
+        if added_fields:
+            layer_fields = cls.source.get_layer_fields(cls.name)
+            for field_name in added_fields:
+                    cls._init_field(
+                        field_name,
+                        cls_fields[field_name],
+                        layer_fields[field_name])
 
     @require_source
     def __init__(self, **kwargs):

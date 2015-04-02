@@ -155,6 +155,7 @@ class SourceFeatureMixin(object):
                 'Widget Number Score',
                 scale=BreaksScale([100, 500, 1000], [1, 2, 3, 4]),
                 value_field='widget_number',
+                storage={'field_type': 'DOUBLE'}
             )
             Shape = GeometryField('Shape')
 
@@ -239,6 +240,25 @@ class TestDataSource(SourceFeatureMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             self.source.get_coded_value(self.DOMAIN_NAME, 'NotADescription')
 
+    def test_add_field(self):
+        num_fields = len(self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+
+        with self.assertRaises(KeyError):
+            self.source.add_field(
+                self.FEATURE_CLASS_NAME,
+                'widget_color',
+                {})
+
+        self.source.add_field(
+            self.FEATURE_CLASS_NAME,
+            'widget_color',
+            {'field_type': 'TEXT', 'field_length': 100})
+
+        fields = self.source.get_layer_fields(self.FEATURE_CLASS_NAME)
+        self.assertEqual(len(fields), num_fields + 1,
+                         'Widget color field not added')
+        self.assertTrue('widget_color' in fields.keys())
+
 
 class TestRegisterFeature(SourceFeatureMixin, unittest.TestCase):
 
@@ -314,6 +334,20 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertEqual(
             self.instance.widget_number_score, 3,
             'Calculated field not updated')
+
+    def test_sync_fields(self):
+        self.assertTrue('widget_number_score' in
+                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+
+        arcpy.DeleteField_management(self.fc_path, 'widget_number_score')
+
+        self.assertTrue('widget_number_score' not in
+                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+
+        self.cls.sync_fields()
+        self.assertTrue('widget_number_score' in
+                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME),
+                        'Syncing fields did not create widget_number_score')
 
 
 class TestBreaksScale(unittest.TestCase):

@@ -4,6 +4,7 @@ from cuuats.datamodel.scales import BaseScale
 class BaseField(object):
 
     creation_index = 0
+    default_storage = {}
 
     def __init__(self, label, **kwargs):
         self.label = label
@@ -12,6 +13,7 @@ class BaseField(object):
         self.required_if = kwargs.get('required_if', None)
         self.domain_name = kwargs.get('domain_name', None)
         self.choices = list(kwargs.get('choices', []))
+        self.storage.update(kwargs.get('storage', {}))
 
         # Handle field ordering
         self.order = kwargs.get('order', 0)
@@ -89,6 +91,11 @@ class GeometryField(BaseField):
 
 class StringField(BaseField):
 
+    default_storage = {
+        'field_type': 'TEXT',
+        'field_length': 100
+    }
+
     def validate(self, value):
         """
         Performs validation on the given value, and returns any error messages.
@@ -101,6 +108,9 @@ class StringField(BaseField):
 
 
 class NumericField(BaseField):
+
+    default_storage = {
+    }
 
     def __init__(self, name, **kwargs):
         super(NumericField, self).__init__(name, **kwargs)
@@ -144,6 +154,10 @@ class CalculatedField(BaseField):
 
 
 class ScaleField(CalculatedField):
+
+    default_storage = {
+        'field_type': 'SHORT',
+    }
 
     def __init__(self, name, **kwargs):
         super(ScaleField, self).__init__(name, **kwargs)

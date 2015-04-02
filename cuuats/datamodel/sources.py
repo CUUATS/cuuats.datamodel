@@ -114,3 +114,14 @@ class DataSource(object):
 
         raise ValueError('Domain %s has no code for description %s' %
                          (domain_name, description))
+
+    def add_field(self, layer_name, field_name, storage):
+        if 'field_type' not in storage:
+            raise KeyError('The storage dictionary must contain the '
+                           'key field_type.')
+
+        layer_path = os.path.join(self.path, layer_name)
+        arcpy.AddField_management(
+            layer_path,
+            field_name,
+            **storage)
