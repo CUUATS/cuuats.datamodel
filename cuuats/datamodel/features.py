@@ -1,6 +1,5 @@
-import warnings
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, NumericField, CalculatedField
+from cuuats.datamodel.fields import BaseField
 from cuuats.datamodel.attachments import AttachmentRelationship
 
 
@@ -41,15 +40,10 @@ class BaseFeature(object):
         if attachment_info is not None:
             cls.attachments = AttachmentRelationship(*attachment_info)
 
+        # Register fields with the source
         layer_fields = source.get_layer_fields(layer_name)
-
         for (field_name, field) in cls.get_fields().items():
-            layer_field = layer_fields.get(field_name, None)
-            if layer_field is None:
-                warnings.warn('%s is not a field of %s' % (
-                    field_name, layer_name))
-            else:
-                cls._init_field(field_name, field, layer_field)
+            field.register(source, field_name, cls.name, layer_fields)
 
     @classmethod
     def get_fields(cls):
@@ -81,21 +75,6 @@ class BaseFeature(object):
             feature.cursor = None
 
     @classmethod
-    def _init_field(cls, field_name, field, layer_field):
-        """
-        Set field properties based on the database schema.
-        """
-
-        field.name = field_name
-        if layer_field.domain:
-            field.domain_name = layer_field.domain
-            domain = cls.source.get_domain(layer_field.domain)
-            if domain.domainType == 'CodedValue':
-                field.choices.extend(domain.codedValues)
-            elif isinstance(field, NumericField):
-                field.min, field.max = domain.range
-
-    @classmethod
     @require_source
     def sync_fields(cls, modify=False, remove=False):
         """
@@ -119,14 +98,10 @@ class BaseFeature(object):
                 cls.source.add_field(cls.name, field_name, storage)
                 added_fields.append(field_name)
 
-        # Reload layer fields to get the newly added fields.
-        if added_fields:
-            layer_fields = cls.source.get_layer_fields(cls.name)
-            for field_name in added_fields:
-                    cls._init_field(
-                        field_name,
-                        cls_fields[field_name],
-                        layer_fields[field_name])
+        # Reregister fields
+        layer_fields = cls.source.get_layer_fields(cls.name)
+        for (field_name, field) in cls_fields.items():
+            field.register(cls.source, field_name, cls.name, layer_fields)
 
     @require_source
     def __init__(self, **kwargs):
@@ -137,11 +112,6 @@ class BaseFeature(object):
 
         self.values = kwargs
         self.cursor = None
-
-        # Trigger the value changed event for all fields that were set
-        # in order to update calculated fields.
-        for field_name in kwargs.keys():
-            self._field_value_changed(field_name)
 
     def __repr__(self):
         name = self.name or '(unregistered)'
@@ -221,7 +191,7 @@ class BaseFeature(object):
         Return a list of values for the fields in this feature.
         """
 
-        return [self.values.get(f, None) for f in self.fields.keys()]
+        return [getattr(self, f) for f in self.fields.keys()]
 
     def update(self):
         """
@@ -233,14 +203,3 @@ class BaseFeature(object):
             raise NotImplementedError(
                 'Cannot update features without an active update cursor')
         self.source.update_row(self.cursor, self.serialize())
-
-    def _field_value_changed(self, field_name):
-        """
-        Event handler triggered when a field value is changed.
-        """
-
-        # Update calculated fields that are tied to the changed value.
-        for field in self.fields.values():
-            if isinstance(field, CalculatedField) and (
-                    not field.update_for or field_name in field.update_for):
-                field.update(self)

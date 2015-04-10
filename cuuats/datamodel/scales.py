@@ -38,3 +38,22 @@ class BreaksScale(BaseScale):
         for (break_value, score) in zip(breaks, self.scores):
             if (value < break_value) or (self.right and value == break_value):
                 return score
+
+
+class DictScale(BaseScale):
+    """
+    A scale based on a scores dictionary.
+    """
+
+    def __init__(self, scores, default=0):
+        self.scores = scores
+        self.default = default
+
+    def score(self, value):
+        """
+        Returns the score for the given value.
+        """
+
+        if value in self.scores:
+            return self.scores[value]
+        return self.default

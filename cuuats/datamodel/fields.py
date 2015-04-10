@@ -1,3 +1,4 @@
+import warnings
 from cuuats.datamodel.scales import BaseScale
 
 
@@ -26,10 +27,28 @@ class BaseField(object):
 
     def __set__(self, instance, value):
         instance.values[self.name] = value
-        instance._field_value_changed(self.name)
 
     def __repr__(self):
         return '%s: %s' % (self.__class__.__name__, self.label)
+
+    def register(self, source, field_name, layer_name, layer_fields):
+        """
+        Register this field with the data source.
+        """
+
+        layer_field = layer_fields.get(field_name, None)
+        if layer_field is None:
+            warnings.warn('%s is not a field of %s' % (
+                field_name, layer_name))
+        else:
+            self.name = field_name
+            if layer_field.domain:
+                self.domain_name = layer_field.domain
+                domain = source.get_domain(layer_field.domain)
+                if domain.domainType == 'CodedValue':
+                    self.choices.extend(domain.codedValues)
+                elif hasattr(self, 'min') and hasattr(self, 'max'):
+                    self.min, self.max = domain.range
 
     def validate(self, value):
         """
@@ -141,18 +160,72 @@ class CalculatedField(BaseField):
         super(CalculatedField, self).__init__(name, **kwargs)
 
         # Overridden by subclasses
-        self.update_for = []
+        self.update_for = kwargs.get('update_for', [])
+        self.condition = kwargs.get('condition', None)
+        self.default = kwargs.get('default', None)
+
+    def __get__(self, instance, owner):
+        if self.condition:
+            locals_dict = {'self': instance}
+            locals_dict.update(instance.values)
+            if not eval(self.condition, {}, locals_dict):
+                return self.default
+        return self.calculate(instance)
 
     def __set__(self, instance, value):
         raise ValueError('Calculated fields cannot be set')
 
-    def update(self, instance):
+    def calculate(self, instance):
         """
-        Update the value of the calculated field for the given instance.
+        Calculate the value for this field based on the state of the instance.
         """
 
         # Overridden by subclasses
-        pass
+        return self.default
+
+
+class MethodField(CalculatedField):
+
+    default_storage = {
+        'field_type': 'DOUBLE',
+    }
+
+    def __init__(self, name, **kwargs):
+        super(MethodField, self).__init__(name, **kwargs)
+        self.method_name = kwargs.get('method_name')
+
+    def calculate(self, instance):
+        """
+        Calculate the value for this field based on the state of the instance.
+        """
+
+        return getattr(instance, self.method_name)(self.name)
+
+
+class WeightsField(CalculatedField):
+
+    default_storage = {
+        'field_type': 'DOUBLE',
+    }
+
+    def __init__(self, name, **kwargs):
+        super(WeightsField, self).__init__(name, **kwargs)
+        self.weights = kwargs.get('weights')
+        self.update_for = self.weights.keys()
+
+    def _get_value(self, instance, field_name):
+        return getattr(instance, field_name)
+
+    def calculate(self, instance):
+        """
+        Calculate the value for this field based on the state of the instance.
+        """
+
+        if None in [self._get_value(instance, v) for v in self.weights.keys()]:
+            return self.default
+        else:
+            return sum([self._get_value(instance, v)*w
+                        for (v, w) in self.weights.items()])
 
 
 class ScaleField(CalculatedField):
@@ -163,17 +236,21 @@ class ScaleField(CalculatedField):
 
     def __init__(self, name, **kwargs):
         super(ScaleField, self).__init__(name, **kwargs)
-        self.scale = kwargs.get('scale', None)
-        self.value_field = kwargs.get('value_field', None)
+        self.scale = kwargs.get('scale')
+        self.value_field = kwargs.get('value_field')
+        self.use_description = kwargs.get('use_description', False)
         self.update_for = [self.value_field]
 
         if not isinstance(self.scale, BaseScale):
             raise TypeError('Scale must be a subclass of BaseScale')
 
-    def update(self, instance):
+    def calculate(self, instance):
         """
-        Update the value of the calculated field for the given instance.
+        Calculate the value for this field based on the state of the instance.
         """
 
-        value = getattr(instance, self.value_field)
-        instance.values[self.name] = self.scale.score(value)
+        if self.use_description:
+            value = instance.get_description_for(self.value_field)
+        else:
+            value = getattr(instance, self.value_field)
+        return self.scale.score(value)
