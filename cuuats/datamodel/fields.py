@@ -160,7 +160,6 @@ class CalculatedField(BaseField):
         super(CalculatedField, self).__init__(name, **kwargs)
 
         # Overridden by subclasses
-        self.update_for = kwargs.get('update_for', [])
         self.condition = kwargs.get('condition', None)
         self.default = kwargs.get('default', None)
 
@@ -211,7 +210,6 @@ class WeightsField(CalculatedField):
     def __init__(self, name, **kwargs):
         super(WeightsField, self).__init__(name, **kwargs)
         self.weights = kwargs.get('weights')
-        self.update_for = self.weights.keys()
 
     def _get_value(self, instance, field_name):
         return getattr(instance, field_name)
@@ -239,7 +237,6 @@ class ScaleField(CalculatedField):
         self.scale = kwargs.get('scale')
         self.value_field = kwargs.get('value_field')
         self.use_description = kwargs.get('use_description', False)
-        self.update_for = [self.value_field]
 
         if not isinstance(self.scale, BaseScale):
             raise TypeError('Scale must be a subclass of BaseScale')
