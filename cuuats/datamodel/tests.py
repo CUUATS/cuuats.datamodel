@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from cuuats.datamodel.sources import DataSource
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
-    StringField, NumericField, ScaleField
+    StringField, NumericField, ScaleField, MethodField
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BreaksScale, DictScale
 
@@ -22,15 +22,17 @@ class TestFields(unittest.TestCase):
             geometry_field = GeometryField('SHAPE')
             string_field = StringField('String Field', required=True)
             numeric_field = NumericField('Numeric Field', min=0, max=10)
+            double_method = MethodField(
+                'Numeric Field Doubled', method_name='_double')
 
             def __init__(self):
                 self.values = {}
 
+            def _double(self, field_name):
+                return self.numeric_field * 2
+
             def get_field(self, field_name):
                 return self.__class__.__dict__[field_name]
-
-            def _field_value_changed(self, field_name):
-                pass
 
         self.inst_a = MyFeatureClass()
         self.inst_b = MyFeatureClass()
@@ -76,6 +78,12 @@ class TestFields(unittest.TestCase):
         self.assertEqual(len(field.validate(0)), 0)
         self.assertEqual(len(field.validate(5)), 0)
         self.assertEqual(len(field.validate(10)), 0)
+
+    def test_method_field(self):
+        self.inst_a.numeric_field = 2
+        self.inst_b.numeric_field = 3
+        self.assertEqual(self.inst_a.double_method, 4)
+        self.assertEqual(self.inst_b.double_method, 6)
 
 
 class SourceFeatureMixin(object):
