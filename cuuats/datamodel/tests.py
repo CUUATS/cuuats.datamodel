@@ -7,7 +7,7 @@ from cuuats.datamodel.sources import DataSource
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
     StringField, NumericField, ScaleField
 from cuuats.datamodel.features import BaseFeature
-from cuuats.datamodel.scales import BreaksScale
+from cuuats.datamodel.scales import BreaksScale, DictScale
 
 
 class TestFields(unittest.TestCase):
@@ -377,6 +377,21 @@ class TestBreaksScale(unittest.TestCase):
         self.assertEqual(self.breaks_left.score(19), 4)
         self.assertEqual(self.breaks_left.score(20), 5)
         self.assertEqual(self.breaks_left.score(100), 5)
+
+
+class TestDictScale(unittest.TestCase):
+
+    def setUp(self):
+        self.scale = DictScale({
+            'one': 1,
+            'two': 2,
+            'three': 3,
+        }, 0)
+
+    def test_score(self):
+        self.assertEqual(self.scale.score('one'), 1)
+        self.assertEqual(self.scale.score('three'), 3)
+        self.assertEqual(self.scale.score('notakey'), 0)
 
 if __name__ == '__main__':
     unittest.main()
