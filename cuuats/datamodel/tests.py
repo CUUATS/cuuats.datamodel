@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from cuuats.datamodel.sources import DataSource
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
-    StringField, NumericField, ScaleField, MethodField
+    StringField, NumericField, ScaleField, MethodField, WeightsField
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BreaksScale, DictScale
 
@@ -24,11 +24,17 @@ class TestFields(unittest.TestCase):
             numeric_field = NumericField('Numeric Field', min=0, max=10)
             double_method = MethodField(
                 'Numeric Field Doubled', method_name='_double')
+            weights_field = WeightsField('Weights Field', weights={
+                'numeric_field': 0.25,
+                'double_method': 0.75
+            }, default=0)
 
             def __init__(self):
                 self.values = {}
 
             def _double(self, field_name):
+                if self.numeric_field is None:
+                    return None
                 return self.numeric_field * 2
 
             def get_field(self, field_name):
@@ -84,6 +90,11 @@ class TestFields(unittest.TestCase):
         self.inst_b.numeric_field = 3
         self.assertEqual(self.inst_a.double_method, 4)
         self.assertEqual(self.inst_b.double_method, 6)
+
+    def test_weights_field(self):
+        self.assertEqual(self.inst_a.weights_field, 0)
+        self.inst_a.numeric_field = 2
+        self.assertEqual(self.inst_a.weights_field, 3.5)
 
 
 class SourceFeatureMixin(object):
