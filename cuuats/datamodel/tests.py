@@ -332,6 +332,36 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
             self.assertTrue(feature.cursor is not None)
             self.assertTrue(feature.widget_name in widget_names)
 
+    def test_get(self):
+        feature = self.cls.get(2)
+        self.assertEqual(feature.OBJECTID, 2)
+        self.assertEqual(feature.widget_name, 'B-Widgety Widget')
+        self.assertEqual(feature.cursor, None)
+
+        with self.assertRaises(LookupError):
+            self.cls.get(5)
+
+    def test_get_update(self):
+        inst_a = self.cls.get(1)
+        inst_b = self.cls.get(2)
+
+        self.assertEqual(inst_a.widget_number, 12345)
+        self.assertEqual(inst_b.widget_number, None)
+
+        inst_a.widget_number = 10
+        inst_a.update()
+
+        inst_b.widget_number = 20
+        inst_b.update()
+
+        del inst_a
+        del inst_b
+
+        widget_numbers = [r[0] for (r, c) in self.source.iter_rows(
+            self.FEATURE_CLASS_NAME, ['widget_number'])]
+        self.assertTrue(10 in widget_numbers)
+        self.assertTrue(20 in widget_numbers)
+
     def test_get_field(self):
         with self.assertRaises(KeyError):
             self.instance.get_field('NotAField')

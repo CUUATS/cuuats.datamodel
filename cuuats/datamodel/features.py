@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField
+from cuuats.datamodel.fields import BaseField, OIDField
 from cuuats.datamodel.attachments import AttachmentRelationship
 
 
@@ -26,6 +26,7 @@ class BaseFeature(object):
     name = None
     source = None
     attachments = None
+    oid_field_name = None
 
     @classmethod
     def register(cls, source, layer_name):
@@ -44,6 +45,8 @@ class BaseFeature(object):
         layer_fields = source.get_layer_fields(layer_name)
         for (field_name, field) in cls.get_fields().items():
             field.register(source, field_name, cls.name, layer_fields)
+            if isinstance(field, OIDField):
+                cls.oid_field_name = field_name
 
     @classmethod
     def get_fields(cls):
@@ -61,7 +64,7 @@ class BaseFeature(object):
 
     @classmethod
     @require_source
-    def iter(cls, update=True, where_clause=None):
+    def iter(cls, update=False, where_clause=None):
         """
         Create a generator used to iterate over features in this class.
         """
@@ -102,6 +105,19 @@ class BaseFeature(object):
         layer_fields = cls.source.get_layer_fields(cls.name)
         for (field_name, field) in cls_fields.items():
             field.register(cls.source, field_name, cls.name, layer_fields)
+
+    @classmethod
+    @require_source
+    def get(cls, oid):
+        """
+        Get a single feature by OID.
+        """
+
+        where_clause = '%s = %i' % (cls.oid_field_name, oid)
+        features = list(cls.iter(where_clause=where_clause))
+        if len(features) == 1:
+            return features[0]
+        raise LookupError('A feature with OID %i was not found' % (oid,))
 
     @require_source
     def __init__(self, **kwargs):
@@ -195,11 +211,24 @@ class BaseFeature(object):
 
     def update(self):
         """
-        Update the corresponding row in the data source. Requires an active
-        update cursor.
+        Update the corresponding row in the data source.
         """
 
-        if self.source is None:
-            raise NotImplementedError(
-                'Cannot update features without an active update cursor')
-        self.source.update_row(self.cursor, self.serialize())
+        if self.cursor is None:
+            # There is not an active cursor.
+            cls = self.__class__
+            oid_field = cls.oid_field_name
+            oid = getattr(self, oid_field)
+            field_names = cls.get_fields().keys()
+            where_clause = '%s = %i' % (oid_field, oid)
+            updated_count = 0
+            for (row, cursor) in cls.source.iter_rows(
+                    cls.name, field_names, True, where_clause):
+                self.source.update_row(cursor, self.serialize())
+                updated_count += 1
+
+            if updated_count == 0:
+                raise LookupError('A row with OID %i was not found' % (oid,))
+
+        else:
+            self.source.update_row(self.cursor, self.serialize())
