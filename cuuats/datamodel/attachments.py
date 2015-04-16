@@ -80,7 +80,7 @@ class AttachmentManager(object):
             id_value = "'%s'" % (id_value,)
         return '%s = %s' % (self.rel.foreign_key, str(id_value))
 
-    def iter(self, update=False, get_data=True):
+    def iter(self, update=False, get_data=True, limit=None):
         """
         Iterate over the attachments for the feature.
         """
@@ -94,7 +94,8 @@ class AttachmentManager(object):
             fields += ['DATA']
 
         for (row, cursor) in self.feature.source.iter_rows(
-                self.rel.destination, fields, update, self._where_clause):
+                self.rel.destination, fields, update,
+                self._where_clause, limit):
             yield Attachment(*row)
 
     def count(self):

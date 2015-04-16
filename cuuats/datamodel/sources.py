@@ -57,7 +57,7 @@ class DataSource(object):
             layer_name, ['OID@'], where_clause=where_clause)))
 
     def iter_rows(self, layer_name, field_names, update=False,
-                  where_clause=None):
+                  where_clause=None, limit=None):
         """
         Iterate over rows of the specified layer.
         """
@@ -71,7 +71,12 @@ class DataSource(object):
 
         with cursor_factory(layer_path, field_names, where_clause) as cursor:
             for row in cursor:
-                yield (row, cursor)
+                if limit is None or limit > 0:
+                    yield (row, cursor)
+                    if limit is not None:
+                        limit -= 1
+                else:
+                    break
 
         if update:
             self.editor.stopEditing(True)

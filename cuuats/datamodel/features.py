@@ -64,14 +64,14 @@ class BaseFeature(object):
 
     @classmethod
     @require_source
-    def iter(cls, update=False, where_clause=None):
+    def iter(cls, update=False, where_clause=None, limit=None):
         """
         Create a generator used to iterate over features in this class.
         """
 
         field_names = cls.get_fields().keys()
         for (row, cursor) in cls.source.iter_rows(
-                cls.name, field_names, update, where_clause):
+                cls.name, field_names, update, where_clause, limit):
             feature = cls(**dict(zip(field_names, row)))
             feature.cursor = cursor
             yield feature
