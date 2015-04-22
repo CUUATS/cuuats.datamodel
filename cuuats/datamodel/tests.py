@@ -116,15 +116,16 @@ class SourceFeatureMixin(object):
     FEATURE_CLASS_TYPE = 'POINT'
     FEATURE_CLASS_FIELDS = (
         ('widget_name', 'TEXT', 100, None),
+        ('widget_description', 'TEXT', None, None),
         ('widget_number', 'LONG', None, None),
         ('widget_available', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
         ('widget_price', 'FLOAT', None, None),
         ('widget_number_score', 'DOUBLE', None, None),
     )
     FEATURE_CLASS_DATA = (
-        ('Widget A+ Awesome', 12345, 100, 10.50, None, (2.5, 3.0)),
-        ('B-Widgety Widget', None, 50, None, None, (-2.0, 5.5)),
-        ('My Widget C', None, None, None, None, (0.0, 4.0)),
+        ('Widget A+ Awesome', None, 12345, 100, 10.50, None, (2.5, 3.0)),
+        ('B-Widgety Widget', None, None, 50, None, None, (-2.0, 5.5)),
+        ('My Widget C', 'Best widget', None, None, None, None, (0.0, 4.0)),
     )
 
     def setUp(self):
@@ -171,6 +172,7 @@ class SourceFeatureMixin(object):
 
             OBJECTID = OIDField('OID')
             widget_name = StringField('Widget Name', required=True)
+            widget_description = StringField('Widget Description')
             widget_number = NumericField('Widget Number', required=True)
             widget_available = NumericField('Is Widget Available?',
                                             required=True)
@@ -318,8 +320,8 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
             widget_available=50, Shape=None)
 
     def test_get_fields(self):
-        field_names = ['OBJECTID', 'widget_name', 'widget_number',
-                       'widget_available', 'widget_price',
+        field_names = ['OBJECTID', 'widget_name', 'widget_description',
+                       'widget_number', 'widget_available', 'widget_price',
                        'widget_number_score', 'Shape']
         self.assertEqual(self.cls.get_fields().keys(), field_names)
 
@@ -410,16 +412,21 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
                         'Syncing fields did not create widget_number_score')
 
     def test_required_if(self):
-        msg = 'Widget Price is missing'
-        self.assertTrue(msg not in self.instance.validate(),
+        price_msg = 'Widget Price is missing'
+        description_msg = 'Widget Description is missing'
+
+        self.assertTrue(description_msg not in self.instance.validate(),
+                        'Optional field produces missing validation message')
+
+        self.assertTrue(price_msg not in self.instance.validate(),
                         'required_if validation message incorrectly generated')
 
         self.instance.set_by_description('widget_available', 'Yes')
-        self.assertTrue(msg in self.instance.validate(),
+        self.assertTrue(price_msg in self.instance.validate(),
                         'required_if validation message not generated')
 
         self.instance.widget_price = 20.00
-        self.assertTrue(msg not in self.instance.validate(),
+        self.assertTrue(price_msg not in self.instance.validate(),
                         'required_if validation message incorrectly generated')
 
 

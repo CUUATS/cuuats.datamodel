@@ -191,7 +191,8 @@ class BaseFeature(object):
         messages = []
         for (field_name, field) in self.fields.items():
             value = getattr(self, field_name)
-            if value is None and self.check_condition(field.required_if):
+            if value is None and self.check_condition(
+                    field.required_if, default=False):
                 messages.append('%s is missing' % (field.label,))
             else:
                 messages.extend(field.validate(value))
@@ -228,14 +229,14 @@ class BaseFeature(object):
         else:
             self.source.update_row(self.cursor, self.serialize())
 
-    def check_condition(self, condition):
+    def check_condition(self, condition, default=True):
         """
         Returns a boolean indicating whether the condition is true for the
         this feature instance.
         """
 
         if condition is None:
-            return True
+            return default
 
         locals_dict = {'self': self}
         locals_dict.update(self.values)
