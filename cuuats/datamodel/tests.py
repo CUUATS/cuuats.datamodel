@@ -40,6 +40,9 @@ class TestFields(unittest.TestCase):
             def get_field(self, field_name):
                 return self.__class__.__dict__[field_name]
 
+            def check_condition(self, condition):
+                return True
+
         self.inst_a = MyFeatureClass()
         self.inst_b = MyFeatureClass()
 
@@ -115,12 +118,13 @@ class SourceFeatureMixin(object):
         ('widget_name', 'TEXT', 100, None),
         ('widget_number', 'LONG', None, None),
         ('widget_available', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
+        ('widget_price', 'FLOAT', None, None),
         ('widget_number_score', 'DOUBLE', None, None),
     )
     FEATURE_CLASS_DATA = (
-        ('Widget A+ Awesome', 12345, 100, None, (2.5, 3.0)),
-        ('B-Widgety Widget', None, 50, None, (-2.0, 5.5)),
-        ('My Widget C', None, None, None, (0.0, 4.0)),
+        ('Widget A+ Awesome', 12345, 100, 10.50, None, (2.5, 3.0)),
+        ('B-Widgety Widget', None, 50, None, None, (-2.0, 5.5)),
+        ('My Widget C', None, None, None, None, (0.0, 4.0)),
     )
 
     def setUp(self):
@@ -170,6 +174,8 @@ class SourceFeatureMixin(object):
             widget_number = NumericField('Widget Number', required=True)
             widget_available = NumericField('Is Widget Available?',
                                             required=True)
+            widget_price = NumericField('Widget Price',
+                                        required_if='self.is_available')
             widget_number_score = ScaleField(
                 'Widget Number Score',
                 scale=BreaksScale([100, 500, 1000], [1, 2, 3, 4]),
@@ -177,6 +183,10 @@ class SourceFeatureMixin(object):
                 storage={'field_type': 'DOUBLE'}
             )
             Shape = GeometryField('Shape')
+
+            @property
+            def is_available(self):
+                return self.get_description_for('widget_available') == 'Yes'
 
         self.cls = Widget
 
@@ -309,7 +319,8 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
 
     def test_get_fields(self):
         field_names = ['OBJECTID', 'widget_name', 'widget_number',
-                       'widget_available', 'widget_number_score', 'Shape']
+                       'widget_available', 'widget_price',
+                       'widget_number_score', 'Shape']
         self.assertEqual(self.cls.get_fields().keys(), field_names)
 
         del self.cls.widget_name
@@ -397,6 +408,19 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertTrue('widget_number_score' in
                         self.source.get_layer_fields(self.FEATURE_CLASS_NAME),
                         'Syncing fields did not create widget_number_score')
+
+    def test_required_if(self):
+        msg = 'Widget Price is missing'
+        self.assertTrue(msg not in self.instance.validate(),
+                        'required_if validation message incorrectly generated')
+
+        self.instance.set_by_description('widget_available', 'Yes')
+        self.assertTrue(msg in self.instance.validate(),
+                        'required_if validation message not generated')
+
+        self.instance.widget_price = 20.00
+        self.assertTrue(msg not in self.instance.validate(),
+                        'required_if validation message incorrectly generated')
 
 
 class TestBreaksScale(unittest.TestCase):

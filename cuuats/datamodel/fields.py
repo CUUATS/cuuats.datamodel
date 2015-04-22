@@ -164,11 +164,8 @@ class CalculatedField(BaseField):
         self.default = kwargs.get('default', None)
 
     def __get__(self, instance, owner):
-        if self.condition:
-            locals_dict = {'self': instance}
-            locals_dict.update(instance.values)
-            if not eval(self.condition, {}, locals_dict):
-                return self.default
+        if not instance.check_condition(self.condition):
+            return self.default
         return self.calculate(instance)
 
     def __set__(self, instance, value):
