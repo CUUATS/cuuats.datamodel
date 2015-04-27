@@ -12,6 +12,22 @@ class BaseScale(object):
         return value
 
 
+class StaticScale(BaseScale):
+    """
+    Scale that returns a static score regardless of the value.
+    """
+
+    def __init__(self, score_value):
+        self.score_value = score_value
+
+    def score(self, value):
+        """
+        Returns the score for the given value.
+        """
+
+        return self.score_value
+
+
 class BreaksScale(BaseScale):
     """
     A scale with predefined breaks.

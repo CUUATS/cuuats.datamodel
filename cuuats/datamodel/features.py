@@ -1,6 +1,9 @@
+import re
 from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, OIDField
 from cuuats.datamodel.attachments import AttachmentRelationship
+
+IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
 
 def require_source(fn):
@@ -229,6 +232,19 @@ class BaseFeature(object):
         else:
             self.source.update_row(self.cursor, self.serialize())
 
+    def eval(self, expression):
+        """
+        Evaluate the expression in the context of the feature instance.
+        """
+
+        identifiers = IDENTIFIER_RE.findall(expression)
+        # Limit retrieval of field values to field names that are found in the
+        # expression in order to prevent recursion for calculated fields.
+        locals_dict = dict([(f, getattr(self, f)) for f
+                            in self.fields.keys() if f in identifiers])
+        locals_dict.update({'self': self})
+        return eval(expression, {}, locals_dict)
+
     def check_condition(self, condition, default=True):
         """
         Returns a boolean indicating whether the condition is true for the
@@ -238,6 +254,4 @@ class BaseFeature(object):
         if condition is None:
             return default
 
-        locals_dict = {'self': self}
-        locals_dict.update(self.values)
-        return bool(eval(condition, {}, locals_dict))
+        return bool(self.eval(condition))

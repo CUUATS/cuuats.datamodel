@@ -235,8 +235,19 @@ class ScaleField(CalculatedField):
         self.value_field = kwargs.get('value_field')
         self.use_description = kwargs.get('use_description', False)
 
-        if not isinstance(self.scale, BaseScale):
-            raise TypeError('Scale must be a subclass of BaseScale')
+        if not isinstance(self.scale, (BaseScale, list, tuple)):
+            raise TypeError('Scale must be a subclass of BaseScale or a '
+                            'list containing tuples of conditions and scales')
+
+    def _get_scale_for(self, instance):
+        if isinstance(self.scale, BaseScale):
+            return self.scale
+
+        for (condition, scale) in self.scale:
+            if instance.check_condition(condition):
+                return scale
+
+        return None
 
     def calculate(self, instance):
         """
@@ -246,5 +257,10 @@ class ScaleField(CalculatedField):
         if self.use_description:
             value = instance.get_description_for(self.value_field)
         else:
-            value = getattr(instance, self.value_field)
-        return self.scale.score(value)
+            value = instance.eval(self.value_field)
+
+        scale = self._get_scale_for(instance)
+        if not scale:
+            return self.default
+
+        return scale.score(value)
