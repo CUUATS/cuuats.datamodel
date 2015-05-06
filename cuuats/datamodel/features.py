@@ -82,6 +82,15 @@ class BaseFeature(object):
 
     @classmethod
     @require_source
+    def count(cls, where_clause=None):
+        """
+        Count the number of features matching the given where clause.
+        """
+
+        return cls.source.count_rows(cls.name, where_clause)
+
+    @classmethod
+    @require_source
     def sync_fields(cls, modify=False, remove=False):
         """
         Adds (and optionally, modify or removes) database fields to match
