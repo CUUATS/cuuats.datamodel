@@ -1,6 +1,8 @@
 import arcpy
 import os
 from collections import namedtuple
+from contextlib import contextmanager
+from time import time
 
 
 class DataSource(object):
@@ -8,8 +10,8 @@ class DataSource(object):
     A data source for manipulating data in a file geodatabase or SDE.
     """
 
-    AttachmentInfo = namedtuple(
-        'AttachmentInfo',
+    RelationshipInfo = namedtuple(
+        'RelationshipInfo',
         ['origin', 'destination', 'primary_key', 'foreign_key'])
 
     def __init__(self, path):
@@ -17,6 +19,24 @@ class DataSource(object):
         self.domains = \
             dict([(d.name, d) for d in arcpy.da.ListDomains(self.path)])
         self.editor = arcpy.da.Editor(self.path)
+
+    def get_relationship_info(self, rc):
+        """
+        Extract the origin, destination, primary and foreign keys from a
+        RelationshipClass Describe result or the name of the relationship
+        class.
+        """
+
+        if isinstance(rc, basestring):
+            rc = arcpy.Describe(os.path.join(self.path, rc))
+
+        origin = rc.originClassNames[0]
+        destination = rc.destinationClassNames[0]
+        keys = rc.OriginClassKeys
+        primary = [k[0] for k in keys if k[1] == 'OriginPrimary'][0]
+        foreign = [k[0] for k in keys if k[1] == 'OriginForeign'][0]
+        return self.RelationshipInfo(
+            origin, destination, primary, foreign)
 
     def get_attachment_info(self, layer_name):
         """
@@ -28,13 +48,7 @@ class DataSource(object):
         for rc_name in layer.relationshipClassNames:
             rc = arcpy.Describe(os.path.join(self.path, rc_name))
             if rc.isAttachmentRelationship:
-                origin = rc.originClassNames[0]
-                destination = rc.destinationClassNames[0]
-                keys = rc.OriginClassKeys
-                primary = [k[0] for k in keys if k[1] == 'OriginPrimary'][0]
-                foreign = [k[0] for k in keys if k[1] == 'OriginForeign'][0]
-                return self.AttachmentInfo(
-                    origin, destination, primary, foreign)
+                return self.get_relationship_info(rc)
         return None
 
     def get_layer_fields(self, layer_name):
@@ -121,6 +135,10 @@ class DataSource(object):
                          (domain_name, description))
 
     def add_field(self, layer_name, field_name, storage):
+        """
+        Add a field to a feature class.
+        """
+
         if 'field_type' not in storage:
             raise KeyError('The storage dictionary must contain the '
                            'key field_type.')
@@ -130,3 +148,61 @@ class DataSource(object):
             layer_path,
             field_name,
             **storage)
+
+    def _make_layer_name(self):
+        """
+        Returns a unique layer name.
+        """
+
+        return 'layer_%s' % (str(time()).replace('.', ''),)
+
+    @contextmanager
+    def make_layer(self, fc_name, where_clause=None):
+        """
+        Temporarily make a feature class into a layer so that it can be
+        used with geoprocessing tools that require a layer.
+        """
+
+        layer_name = self._make_layer_name()
+        fc_path = os.path.join(self.path, fc_name)
+
+        arcpy.MakeFeatureLayer_management(fc_path, layer_name)
+        yield layer_name
+
+        arcpy.Delete_management(layer_name)
+
+    def set_nearest(self, rc_name, search_dist=None, update=False):
+        """
+        Assign or update values for a nearest feature relationship defined in
+        a relationship class.
+        """
+
+        rc_info = self.get_relationship_info(rc_name)
+
+        with self.make_layer(rc_info.origin) as origin_layer, \
+                self.make_layer(rc_info.destination) as destination_layer:
+            if not update:
+                where_clause = '%s IS NULL' % (rc_info.foreign_key,)
+                arcpy.SelectLayerByAttribute_management(
+                    destination_layer, where_clause=where_clause)
+
+            # Generate the near table.
+            near_name = self._make_layer_name()
+            near_path = 'in_memory/%s' % (near_name,)
+            arcpy.GenerateNearTable_analysis(
+                destination_layer, [origin_layer], near_path, search_dist)
+
+            # Join the near table to the destination feature class.
+            dest_pk = arcpy.Describe(destination_layer).OIDFieldName
+            arcpy.AddJoin_management(
+                destination_layer, dest_pk, near_path, 'IN_FID')
+
+            # Field calc the feature class field to match the near table.
+            calc_field = '%s.%s' % (rc_info.destination, rc_info.foreign_key)
+            calc_expression = '[%s.NEAR_FID]' % (near_name,)
+            arcpy.CalculateField_management(
+                destination_layer, calc_field, calc_expression)
+
+            # Remove the join and delete the near table from memory.
+            arcpy.RemoveJoin_management(destination_layer)
+            arcpy.Delete_management(near_path)
