@@ -1,6 +1,6 @@
 import re
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, OIDField
+from cuuats.datamodel.fields import BaseField, OIDField, BatchField
 from cuuats.datamodel.attachments import AttachmentRelationship
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
@@ -88,6 +88,20 @@ class BaseFeature(object):
         """
 
         return cls.source.count_rows(cls.name, where_clause)
+
+    @classmethod
+    @require_source
+    def update_batch_fields(cls, field_names=None):
+        """
+        Update the given (or all) batch fields for this feature class.
+        """
+
+        fields = [f for (n, f) in cls.get_fields().items()
+                  if (isinstance(f, BatchField)
+                  and (field_names is None or n in field_names))]
+
+        for field in fields:
+            field.update(cls)
 
     @classmethod
     @require_source

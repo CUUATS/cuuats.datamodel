@@ -264,3 +264,46 @@ class ScaleField(CalculatedField):
             return self.default
 
         return scale.score(value)
+
+
+class BatchField(BaseField):
+
+    def __init__(self, name, **kwargs):
+        super(BatchField, self).__init__(name, **kwargs)
+
+        # Overridden by subclasses
+        self.default = kwargs.get('default', None)
+
+    def __set__(self, instance, value):
+        raise ValueError('Batch fields cannot be set')
+
+    def update(self, cls):
+        """
+        Update the field values for this feature class.
+        """
+
+        # Overridden by subclasses
+        return self.default
+
+
+class RelationshipSummaryField(BatchField):
+
+    def __init__(self, name, **kwargs):
+        super(RelationshipSummaryField, self).__init__(name, **kwargs)
+
+        # Overridden by subclasses
+        self.rel = kwargs.get('relationship', None)
+        self.summary_field = kwargs.get('summary_field', None)
+        self.statistic = kwargs.get('statistic', None)
+        self.where_clause = kwargs.get('where_clause', None)
+
+    def update(self, cls):
+        """
+        Update the field values for this feature class.
+        """
+
+        cls.source.update_relationship_statistics(
+            self.rel,
+            {self.name: [self.summary_field, self.statistic]},
+            self.where_clause,
+            self.default)
