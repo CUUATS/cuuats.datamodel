@@ -9,7 +9,8 @@ class BaseField(object):
 
     def __init__(self, label, **kwargs):
         self.label = label
-        self.name = kwargs.get('name', False)
+        self.name = kwargs.get('name', None)
+        self.db_name = kwargs.get('db_name', None)
         self.required = kwargs.get('required', False)
         self.required_if = kwargs.get('required_if', None)
         self.domain_name = kwargs.get('domain_name', None)
@@ -42,6 +43,8 @@ class BaseField(object):
                 field_name, layer_name))
         else:
             self.name = field_name
+            if self.db_name is None:
+                self.db_name = field_name
             if layer_field.domain:
                 self.domain_name = layer_field.domain
                 domain = source.get_domain(layer_field.domain)
@@ -99,6 +102,10 @@ class GeometryField(BaseField):
     """
     Geometry field type.
     """
+
+    def __init__(self, label, **kwargs):
+        super(GeometryField, self).__init__(label, **kwargs)
+        self.db_name = kwargs.get('db_name', 'SHAPE@')
 
     def validate(self, value):
         """

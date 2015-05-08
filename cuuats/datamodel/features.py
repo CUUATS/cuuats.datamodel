@@ -73,8 +73,9 @@ class BaseFeature(object):
         """
 
         field_names = cls.get_fields().keys()
+        db_names = [f.db_name for f in cls.get_fields().values()]
         for (row, cursor) in cls.source.iter_rows(
-                cls.name, field_names, update, where_clause, limit):
+                cls.name, db_names, update, where_clause, limit):
             feature = cls(**dict(zip(field_names, row)))
             feature.cursor = cursor
             yield feature
