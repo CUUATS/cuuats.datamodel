@@ -11,6 +11,7 @@ class BaseField(object):
         self.label = label
         self.name = kwargs.get('name', None)
         self.db_name = kwargs.get('db_name', None)
+        self.deferred = kwargs.get('deferred', False)
         self.required = kwargs.get('required', False)
         self.required_if = kwargs.get('required_if', None)
         self.domain_name = kwargs.get('domain_name', None)
@@ -106,6 +107,7 @@ class GeometryField(BaseField):
     def __init__(self, label, **kwargs):
         super(GeometryField, self).__init__(label, **kwargs)
         self.db_name = kwargs.get('db_name', 'SHAPE@')
+        self.deferred = kwargs.get('deferred', True)
 
     def validate(self, value):
         """
