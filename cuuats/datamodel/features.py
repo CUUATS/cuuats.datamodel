@@ -30,6 +30,7 @@ class BaseFeature(object):
     source = None
     attachments = None
     oid_field_name = None
+    db_row = None
 
     @classmethod
     def register(cls, source, layer_name):
@@ -78,6 +79,7 @@ class BaseFeature(object):
                 cls.name, db_names, update, where_clause, limit):
             feature = cls(**dict(zip(field_names, row)))
             feature.cursor = cursor
+            feature.db_row = row
             yield feature
             feature.cursor = None
 
@@ -237,6 +239,10 @@ class BaseFeature(object):
         Update the corresponding row in the data source.
         """
 
+        new_row = self.serialize()
+        if new_row == self.db_row:
+            return False
+
         if self.cursor is None:
             # There is not an active cursor.
             cls = self.__class__
@@ -247,14 +253,19 @@ class BaseFeature(object):
             updated_count = 0
             for (row, cursor) in cls.source.iter_rows(
                     cls.name, field_names, True, where_clause):
-                self.source.update_row(cursor, self.serialize())
+                self.source.update_row(cursor, new_row)
                 updated_count += 1
 
             if updated_count == 0:
                 raise LookupError('A row with OID %i was not found' % (oid,))
+            else:
+                self.db_row = new_row
+                return True
 
         else:
-            self.source.update_row(self.cursor, self.serialize())
+            self.source.update_row(self.cursor, new_row)
+            self.db_row = new_row
+            return True
 
     def eval(self, expression):
         """

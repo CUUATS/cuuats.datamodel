@@ -375,6 +375,24 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertTrue(10 in widget_numbers)
         self.assertTrue(20 in widget_numbers)
 
+    def test_update_no_change(self):
+        # Update all features to set calculated field values.
+        for feature in self.cls.iter(update=True):
+            feature.update()
+
+        # Try updating features without changing anything.
+        update_count = 0
+        for feature in self.cls.iter(update=True):
+            update_count += int(feature.update())
+        self.assertEqual(update_count, 0, 'Features updated unnecessarily')
+
+        # Change a value, and check the update count.
+        update_count = 0
+        for feature in self.cls.iter(update=True):
+            feature.widget_number = 500
+            update_count += int(feature.update())
+        self.assertEqual(update_count, 3, 'Features not updated after change')
+
     def test_get_field(self):
         with self.assertRaises(KeyError):
             self.instance.get_field('NotAField')
