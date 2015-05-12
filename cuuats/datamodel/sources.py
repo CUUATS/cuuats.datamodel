@@ -3,6 +3,8 @@ import os
 from collections import namedtuple
 from contextlib import contextmanager
 from time import time
+from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
+    MultipleObjectsReturned
 
 
 class DataSource(object):
@@ -69,6 +71,21 @@ class DataSource(object):
 
         return len(list(self.iter_rows(
             layer_name, ['OID@'], where_clause=where_clause)))
+
+    def get_row(self, layer_name, field_names, where_clause=None):
+        """
+        Retrieve a row from the specified feature class.
+        """
+
+        rows_cursors = self.iter_rows(
+            layer_name, field_names, where_clause=where_clause, limit=2)
+        rows = [r for (r, c) in rows_cursors]
+
+        if len(rows) == 1:
+            return rows[0]
+        elif len(rows) == 0:
+            raise ObjectDoesNotExist(where_clause)
+        raise MultipleObjectsReturned(where_clause)
 
     def iter_rows(self, layer_name, field_names, update=False,
                   where_clause=None, limit=None):

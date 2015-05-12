@@ -1,12 +1,6 @@
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
-
-
-class DeferredValue(object):
-
-    def __init__(self, field_name, db_name):
-        self.field_name = field_name
-        self.db_name = db_name
+from cuuats.datamodel.fields import DeferredValue
 
 
 class Q(object):
@@ -22,7 +16,8 @@ class Q(object):
     }
 
     def __init__(self, filters={}, **kwargs):
-        print filters
+        if isinstance(filters, Q):
+            self.sql = filters.sql
         if isinstance(filters, basestring):
             self.sql = filters
         elif isinstance(filters, dict):
@@ -74,48 +69,67 @@ class Q(object):
 
 class Query(object):
 
-    def __init__(self, fields=[], where=None, order_by=None, group_by=None):
+    def __init__(self, fields=[]):
         self.fields = fields
-        self.where = where
-        self.order_by = order_by
-        self.group_by = group_by
+        self._where = None
+        self._order_by = None
+        self._group_by = None
 
-    def _clone(self):
-        return self.__class__(
-            self.fields, self.where, self.order_by, self.group_by)
+    def clone(self):
+        clone = self.__class__(self.fields)
+        clone._where = self._where
+        clone._order_by = self._order_by
+        clone._group_by = self._group_by
+        return clone
 
-    def _add_q(self, q):
-        if self.where is None:
-            self.where = q
+    def add_q(self, q):
+        if self._where is None:
+            self._where = q
         else:
-            self.where = self.where & q
+            self._where = self._where & q
 
-    def _set_order(self, fields):
-        self.order_by = []
+    def set_order(self, fields):
+        self._order_by = []
         for field in fields:
             if isinstance(field, basestring):
                 self.order_by.append([field, 'ASC'])
             else:
                 self.order_by.append(field)
 
+    @property
+    def where(self):
+        if self._where is None:
+            return None
+        return self._where.sql
+
+    @property
+    def prefix(self):
+            return None
+
+    @property
+    def postfix(self):
+        if not self._order_by:
+            return None
+
+        return 'ORDER BY %s' % (
+            ', '.join(['%s %s' % (c, o) for (c, o) in self._order_by]))
+
 
 class QuerySet(object):
 
     def __init__(self, feature_class, query=None):
         self.feature_class = feature_class
-        self._field_names =
-        self.query = query or self._make_query()
+        self.query = query or self._make_query(feature_class)
         self._field_name_cache = None
         self._db_name_cache = None
-        self._row_cache = []
+        self._cache = []
 
     def __len__(self):
         return self.count()
 
     def __iter__(self):
         self._fetch_all()
-        for row in self._row_cache:
-            return self._feature(row)
+        return iter(self._cache)
 
     def _make_query(self, feature_class):
         fields = [f.db_name for f in feature_class.get_fields().values()
@@ -123,13 +137,14 @@ class QuerySet(object):
         return Query(fields)
 
     def _fetch_all(self):
-        if self._row_cache is None:
-            self._row_cache = list(self.iterator())
+        if not self._cache:
+            self._cache = list(self.iterator())
 
     def _clone(self):
-        clone = self.__class__(self.feature_class, self.query._clone())
+        clone = self.__class__(self.feature_class, self.query.clone())
         clone._field_name_cache = self._field_name_cache
         clone._db_name_cache = self._db_name_cache
+        return clone
 
     @property
     def _field_names(self):
@@ -145,10 +160,10 @@ class QuerySet(object):
         return self._db_name_cache
 
     def _feature(self, row):
+        fields = zip(self._field_names, self._db_names)
         row_map = dict(zip(self.query.fields, row))
-        # FIXME: Need to get DB name for deferred fields
-        values = [row_map.get(n, DeferredValue(n)) for n in self._field_names]
-        return self.feature_class(**dict(zip(self._field_names, row)))
+        values = [row_map.get(d, DeferredValue(f, d)) for (f, d) in fields]
+        return self.feature_class(**dict(zip(self._field_names, values)))
 
     # Methods that return QuerySets
     def all(self):
@@ -156,39 +171,40 @@ class QuerySet(object):
 
     def filter(self, *args, **kwargs):
         clone = self._clone()
-        clone.query._add_q(Q(*args, **kwargs))
+        clone.query.add_q(Q(*args, **kwargs))
         return clone
 
     def exclude(self, *args, **kwargs):
         clone = self._clone()
-        clone.query._add_q(~Q(*args, **kwargs))
+        clone.query.add_q(~Q(*args, **kwargs))
         return clone
 
     def order_by(self, fields):
         clone = self._clone()
-        clone.query._set_order(fields)
+        clone.query.set_order(fields)
         return clone
 
     # Methods that do not return QuerySets
     def get(self, *args, **kwargs):
         clone = self._clone()
-        clone.query._add_q(Q(*args, **kwargs))
+        clone.query.add_q(Q(*args, **kwargs))
         clone_length = len(clone)
         if clone_length == 1:
-            return self._feature(clone._row_cache[0])
+            return clone._cache[0]
         elif clone_length == 0:
-            raise ObjectDoesNotExist(clone.query)
-        raise MultipleObjectsReturned(clone.query)
+            raise ObjectDoesNotExist(clone.query.where)
+        raise MultipleObjectsReturned(clone.query.where)
 
     def count(self):
-        # TODO: Investigate whether using selection would be faster.
+        # TODO: Investigate whether using selection would be faster in cases
+        # where the results are not already cached.
         self._fetch_all()
-        return len(self._row_cache)
+        return len(self._cache)
 
     def iterator(self):
         for (row, cursor) in self.feature_class.source.iter_rows(
                 self.feature_class.name, self._db_names, False,
-                self._where_clause, None):
+                self.query.where, None):
             yield self._feature(row)
 
     def latest(self, field_name):

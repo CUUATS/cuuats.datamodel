@@ -2,6 +2,16 @@ import warnings
 from cuuats.datamodel.scales import BaseScale
 
 
+class DeferredValue(object):
+    """
+    A field value that is only retrieved from the database when needed.
+    """
+
+    def __init__(self, field_name, db_name):
+        self.field_name = field_name
+        self.db_name = db_name
+
+
 class BaseField(object):
 
     creation_index = 0
@@ -25,6 +35,8 @@ class BaseField(object):
         BaseField.creation_index += 1
 
     def __get__(self, instance, owner):
+        if isinstance(instance.values.get(self.name, None), DeferredValue):
+            instance.get_deferred_values()
         return instance.values.get(self.name, None)
 
     def __set__(self, instance, value):

@@ -1,7 +1,9 @@
 import re
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, OIDField, BatchField
+from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
+    DeferredValue
 from cuuats.datamodel.attachments import AttachmentRelationship
+from cuuats.datamodel.query import Q
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
@@ -160,7 +162,15 @@ class BaseFeature(object):
 
     def __repr__(self):
         name = self.name or '(unregistered)'
-        return '%s: %s' % (self.__class__.__name__, name)
+        return '<%s: %s>' % (self.__class__.__name__, name)
+
+    @property
+    def oid_where(self):
+        """
+        Where clause for selecting this feature.
+        """
+
+        return Q({self.oid_field_name: getattr(self, self.oid_field_name)}).sql
 
     def get_field(self, field_name):
         """
@@ -170,6 +180,21 @@ class BaseFeature(object):
         if field_name not in self.fields:
             raise KeyError('Invalid field name: %s' % (field_name,))
         return self.fields[field_name]
+
+    def get_deferred_values(self, fields=[]):
+        """
+        Retrieve deferred values from the database.
+        """
+
+        if not fields:
+            fields = dict([(v.field_name, v.db_name) for v in
+                           self.values.values()
+                           if isinstance(v, DeferredValue)])
+
+        values = self.source.get_row(
+            self.name, fields.values(), self.oid_where)
+
+        self.values.update(dict(zip(fields.keys(), values)))
 
     def set_by_description(self, field_name, description):
         """
