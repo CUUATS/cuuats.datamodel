@@ -198,8 +198,12 @@ class QuerySet(object):
     def count(self):
         # TODO: Investigate whether using selection would be faster in cases
         # where the results are not already cached.
-        self._fetch_all()
-        return len(self._cache)
+        if self._cache:
+            return len(self._cache)
+
+        return self.feature_class.source.count_rows(
+            self.feature_class.name,
+            self.query.where)
 
     def iterator(self):
         for (row, cursor) in self.feature_class.source.iter_rows(
