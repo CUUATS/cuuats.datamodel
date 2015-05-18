@@ -219,8 +219,11 @@ class QuerySet(object):
     def last(self, field_name):
         pass
 
-    def aggregate(self, *args, **kwargs):
-        pass
+    def aggregate(self, fields):
+        return self.feature_class.source.summarize(
+            self.feature_class.name,
+            fields,
+            self.query.where)
 
     def exists(self):
         pass

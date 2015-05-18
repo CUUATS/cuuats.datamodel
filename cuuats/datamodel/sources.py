@@ -1,5 +1,6 @@
 import arcpy
 import os
+import re
 from collections import namedtuple
 from contextlib import contextmanager
 from time import time
@@ -187,6 +188,28 @@ class DataSource(object):
         yield layer_name
 
         arcpy.Delete_management(layer_name)
+
+    def summarize(self, fc_name, fields, where_clause=None):
+        """
+        Generate summary statistics for a feature class.
+        """
+
+        summary_name = self._make_layer_name()
+        summary_path = 'in_memory/%s' % (summary_name,)
+
+        with self.make_layer(fc_name) as layer_name:
+            if where_clause:
+                arcpy.SelectLayerByAttribute_management(
+                    layer_name, where_clause=where_clause)
+
+            arcpy.Statistics_analysis(
+                layer_name, summary_path, fields)
+
+        summary_fields = [re.sub(r'[^A-Za-z0-9]', '_', '%s_%s' % (s, f))
+                          for (f, s) in fields]
+
+        for row in arcpy.da.SearchCursor(summary_path, summary_fields):
+            return dict(zip(summary_fields, row))
 
     def set_nearest(self, rc_name, search_dist=None, update=False):
         """
