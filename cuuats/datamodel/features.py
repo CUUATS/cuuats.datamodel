@@ -3,7 +3,7 @@ from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
     DeferredValue
 from cuuats.datamodel.attachments import AttachmentRelationship
-from cuuats.datamodel.query import Q
+from cuuats.datamodel.query import Q, Manager
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
@@ -33,6 +33,7 @@ class BaseFeature(object):
     attachments = None
     oid_field_name = None
     db_row = None
+    objects = Manager()
 
     @classmethod
     def register(cls, source, layer_name):
