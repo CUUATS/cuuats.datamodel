@@ -211,16 +211,10 @@ class QuerySet(object):
                 self.query.where, None):
             yield self._feature(row)
 
-    def latest(self, field_name):
+    def first(self):
         pass
 
-    def earliest(self, field_name):
-        pass
-
-    def first(self, field_name):
-        pass
-
-    def last(self, field_name):
+    def last(self):
         pass
 
     def aggregate(self, fields):
@@ -230,7 +224,9 @@ class QuerySet(object):
             self.query.where)
 
     def exists(self):
-        pass
+        if self._cache:
+            return True
+        return self.first() is not None
 
     def update(self):
         pass
