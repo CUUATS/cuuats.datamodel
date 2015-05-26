@@ -252,10 +252,10 @@ class QuerySet(object):
         return self.first() is not None
 
     def update(self):
-        pass
+        raise NotImplementedError('QuerySet updates are not yet supported')
 
     def delete(self):
-        pass
+        raise NotImplementedError('QuerySet deletions are not yet supported')
 
 
 class Manager(object):

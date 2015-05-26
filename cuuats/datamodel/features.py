@@ -118,8 +118,8 @@ class BaseFeature(object):
         """
 
         if modify or remove:
-            raise NotImplemented('Modification and removal of fields are not '
-                                 'yet supported')
+            raise NotImplementedError('Modification and removal of fields '
+                                      'are not yet supported')
 
         cls_fields = cls.get_fields()
         layer_fields = cls.source.get_layer_fields(cls.name)
