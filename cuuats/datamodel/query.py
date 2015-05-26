@@ -199,6 +199,7 @@ class QuerySet(object):
     def get(self, *args, **kwargs):
         clone = self._clone()
         clone.query.add_q(Q(*args, **kwargs))
+        clone._fetch_all()
         clone_length = len(clone)
         if clone_length == 1:
             return clone._cache[0]
