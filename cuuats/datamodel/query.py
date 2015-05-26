@@ -96,6 +96,15 @@ class Query(object):
             else:
                 self._order_by.append(field)
 
+    def reverse_order(self):
+        new_order = []
+        for (field, direction) in self._order_by:
+            if direction == 'ASC':
+                new_order.append([field, 'DESC'])
+            else:
+                new_order.append([field, 'ASC'])
+        self._order_by = new_order
+
     @property
     def where(self):
         if self._where is None:
@@ -207,17 +216,29 @@ class QuerySet(object):
             self.feature_class.name,
             self.query.where)
 
-    def iterator(self):
+    def iterator(self, limit=None):
         for (row, cursor) in self.feature_class.source.iter_rows(
                 self.feature_class.name, self._db_names, False,
-                self.query.where, None, self.query.prefix, self.query.postfix):
+                self.query.where, limit, self.query.prefix,
+                self.query.postfix):
             yield self._feature(row)
 
     def first(self):
-        pass
+        if self._cache:
+            return self._cache[0]
+
+        results = list(self.iterator(limit=1))
+        if results:
+            return results[0]
+        return None
 
     def last(self):
-        pass
+        if self._cache:
+            return self._cache[-1]
+
+        clone = self._clone()
+        clone.query.reverse_order()
+        return clone.first()
 
     def aggregate(self, fields):
         return self.feature_class.source.summarize(
