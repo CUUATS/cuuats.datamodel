@@ -89,7 +89,7 @@ class DataSource(object):
         raise MultipleObjectsReturned(where_clause)
 
     def iter_rows(self, layer_name, field_names, update=False,
-                  where_clause=None, limit=None):
+                  where_clause=None, limit=None, prefix=None, postfix=None):
         """
         Iterate over rows of the specified layer.
         """
@@ -101,7 +101,8 @@ class DataSource(object):
             cursor_factory = arcpy.da.UpdateCursor
             self.editor.startEditing(False, False)
 
-        with cursor_factory(layer_path, field_names, where_clause) as cursor:
+        with cursor_factory(layer_path, field_names, where_clause,
+                            sql_clause=(prefix, postfix)) as cursor:
             for row in cursor:
                 if limit is None or limit > 0:
                     yield (row, cursor)

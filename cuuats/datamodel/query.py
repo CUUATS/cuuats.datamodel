@@ -92,9 +92,9 @@ class Query(object):
         self._order_by = []
         for field in fields:
             if isinstance(field, basestring):
-                self.order_by.append([field, 'ASC'])
+                self._order_by.append([field, 'ASC'])
             else:
-                self.order_by.append(field)
+                self._order_by.append(field)
 
     @property
     def where(self):
@@ -134,7 +134,9 @@ class QuerySet(object):
     def _make_query(self, feature_class):
         fields = [f.db_name for f in feature_class.get_fields().values()
                   if not f.deferred]
-        return Query(fields)
+        query = Query(fields)
+        query.set_order([(feature_class.oid_field_name, 'ASC')])
+        return query
 
     def _fetch_all(self):
         if not self._cache:
@@ -208,7 +210,7 @@ class QuerySet(object):
     def iterator(self):
         for (row, cursor) in self.feature_class.source.iter_rows(
                 self.feature_class.name, self._db_names, False,
-                self.query.where, None):
+                self.query.where, None, self.query.prefix, self.query.postfix):
             yield self._feature(row)
 
     def first(self):
