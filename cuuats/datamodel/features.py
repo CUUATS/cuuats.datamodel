@@ -71,23 +71,6 @@ class BaseFeature(object):
 
     @classmethod
     @require_source
-    def iter(cls, update=False, where_clause=None, limit=None):
-        """
-        Create a generator used to iterate over features in this class.
-        """
-
-        field_names = cls.get_fields().keys()
-        db_names = [f.db_name for f in cls.get_fields().values()]
-        for (row, cursor) in cls.source.iter_rows(
-                cls.name, db_names, update, where_clause, limit):
-            feature = cls(**dict(zip(field_names, row)))
-            feature.cursor = cursor
-            feature.db_row = row
-            yield feature
-            feature.cursor = None
-
-    @classmethod
-    @require_source
     def count(cls, where_clause=None):
         """
         Count the number of features matching the given where clause.
@@ -138,19 +121,6 @@ class BaseFeature(object):
         for (field_name, field) in cls_fields.items():
             field.register(cls.source, field_name, cls.name, layer_fields)
 
-    @classmethod
-    @require_source
-    def get(cls, oid):
-        """
-        Get a single feature by OID.
-        """
-
-        where_clause = '%s = %i' % (cls.oid_field_name, oid)
-        features = list(cls.iter(where_clause=where_clause))
-        if len(features) == 1:
-            return features[0]
-        raise LookupError('A feature with OID %i was not found' % (oid,))
-
     @require_source
     def __init__(self, **kwargs):
         self.fields = self.__class__.get_fields()
@@ -159,7 +129,8 @@ class BaseFeature(object):
                 raise KeyError('Invalid field name: %s' % (field_name))
 
         self.values = kwargs
-        self.cursor = None
+        self.db_row = [kwargs[f] for f in self.fields.keys() if f in kwargs
+                       and not isinstance(kwargs[f], DeferredValue)]
 
     def __repr__(self):
         name = self.name or '(unregistered)'
@@ -255,10 +226,12 @@ class BaseFeature(object):
 
     def serialize(self):
         """
-        Return a list of values for the fields in this feature.
+        Return a list of values for the fields in this feature. Deferred values
+        that have not been retrieved are excluded.
         """
 
-        return [getattr(self, f) for f in self.fields.keys()]
+        return [getattr(self, f) for f in self.fields.keys()
+                if not isinstance(self.values.get(f), DeferredValue)]
 
     def save(self):
         """
@@ -269,27 +242,20 @@ class BaseFeature(object):
         if new_row == self.db_row:
             return False
 
-        if self.cursor is None:
-            # There is not an active cursor.
-            cls = self.__class__
-            oid_field = cls.oid_field_name
-            oid = getattr(self, oid_field)
-            field_names = cls.get_fields().keys()
-            where_clause = '%s = %i' % (oid_field, oid)
-            updated_count = 0
-            for (row, cursor) in cls.source.iter_rows(
-                    cls.name, field_names, True, where_clause):
-                self.source.update_row(cursor, new_row)
-                updated_count += 1
+        oid_field = self.oid_field_name
+        oid = getattr(self, oid_field)
+        field_names = [f for f in self.fields.keys()
+                       if not isinstance(self.values.get(f), DeferredValue)]
+        where_clause = '%s = %i' % (oid_field, oid)
+        updated_count = 0
+        for (row, cursor) in self.source.iter_rows(
+                self.name, field_names, True, where_clause):
+            self.source.update_row(cursor, new_row)
+            updated_count += 1
 
-            if updated_count == 0:
-                raise LookupError('A row with OID %i was not found' % (oid,))
-            else:
-                self.db_row = new_row
-                return True
-
+        if updated_count == 0:
+            raise LookupError('A row with OID %i was not found' % (oid,))
         else:
-            self.source.update_row(self.cursor, new_row)
             self.db_row = new_row
             return True
 

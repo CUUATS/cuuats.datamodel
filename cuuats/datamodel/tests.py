@@ -3,6 +3,8 @@ import os
 import shutil
 import tempfile
 import unittest
+from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
+    MultipleObjectsReturned
 from cuuats.datamodel.sources import DataSource
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
     StringField, NumericField, ScaleField, MethodField, WeightsField
@@ -338,57 +340,20 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
             self.cls.get_fields().keys()[0], 'widget_name',
             'fields are not ordered base on order argument')
 
-    def test_iter(self):
-        widget_names = [row[0] for row in self.FEATURE_CLASS_DATA]
-        for feature in self.cls.iter():
-            self.assertTrue(isinstance(feature, self.cls))
-            self.assertTrue(feature.cursor is not None)
-            self.assertTrue(feature.widget_name in widget_names)
-
-    def test_get(self):
-        feature = self.cls.get(2)
-        self.assertEqual(feature.OBJECTID, 2)
-        self.assertEqual(feature.widget_name, 'B-Widgety Widget')
-        self.assertEqual(feature.cursor, None)
-
-        with self.assertRaises(LookupError):
-            self.cls.get(5)
-
-    def test_get_save(self):
-        inst_a = self.cls.get(1)
-        inst_b = self.cls.get(2)
-
-        self.assertEqual(inst_a.widget_number, 12345)
-        self.assertEqual(inst_b.widget_number, None)
-
-        inst_a.widget_number = 10
-        inst_a.save()
-
-        inst_b.widget_number = 20
-        inst_b.save()
-
-        del inst_a
-        del inst_b
-
-        widget_numbers = [r[0] for (r, c) in self.source.iter_rows(
-            self.FEATURE_CLASS_NAME, ['widget_number'])]
-        self.assertTrue(10 in widget_numbers)
-        self.assertTrue(20 in widget_numbers)
-
     def test_save_no_change(self):
         # Update all features to set calculated field values.
-        for feature in self.cls.iter(update=True):
+        for feature in self.cls.objects.all():
             feature.save()
 
         # Try updating features without changing anything.
         update_count = 0
-        for feature in self.cls.iter(update=True):
+        for feature in self.cls.objects.all():
             update_count += int(feature.save())
         self.assertEqual(update_count, 0, 'Features updated unnecessarily')
 
         # Change a value, and check the update count.
         update_count = 0
-        for feature in self.cls.iter(update=True):
+        for feature in self.cls.objects.all():
             feature.widget_number = 500
             update_count += int(feature.save())
         self.assertEqual(update_count, 3, 'Features not updated after change')
@@ -446,6 +411,51 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.instance.widget_price = 20.00
         self.assertTrue(price_msg not in self.instance.validate(),
                         'required_if validation message incorrectly generated')
+
+
+class TestQuerySet(SourceFeatureMixin, unittest.TestCase):
+
+        def setUp(self):
+            super(TestQuerySet, self).setUp()
+            self.cls.register(self.source, self.FEATURE_CLASS_NAME)
+
+        def test_all(self):
+            widget_names = [row[0] for row in self.FEATURE_CLASS_DATA]
+            for feature in self.cls.objects.all():
+                self.assertTrue(isinstance(feature, self.cls))
+                self.assertTrue(feature.widget_name in widget_names)
+
+        def test_get(self):
+            feature = self.cls.objects.get(OBJECTID=2)
+            self.assertEqual(feature.OBJECTID, 2)
+            self.assertEqual(feature.widget_name, 'B-Widgety Widget')
+
+            with self.assertRaises(ObjectDoesNotExist):
+                self.cls.objects.get(OBJECTID=5)
+
+            with self.assertRaises(MultipleObjectsReturned):
+                self.cls.objects.get(widget_description=None)
+
+        def test_get_save(self):
+            inst_a = self.cls.objects.get(OBJECTID=1)
+            inst_b = self.cls.objects.get(OBJECTID=2)
+
+            self.assertEqual(inst_a.widget_number, 12345)
+            self.assertEqual(inst_b.widget_number, None)
+
+            inst_a.widget_number = 10
+            inst_a.save()
+
+            inst_b.widget_number = 20
+            inst_b.save()
+
+            del inst_a
+            del inst_b
+
+            widget_numbers = [r[0] for (r, c) in self.source.iter_rows(
+                self.FEATURE_CLASS_NAME, ['widget_number'])]
+            self.assertTrue(10 in widget_numbers)
+            self.assertTrue(20 in widget_numbers)
 
 
 class TestBreaksScale(unittest.TestCase):
