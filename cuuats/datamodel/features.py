@@ -211,11 +211,16 @@ class BaseFeature(object):
     def validate(self):
         """
         Perform validation on each field in the feature, and return any
-        validation error messages.
+        validation error messages. Deferred values that have not been
+        retrieved are skipped.
         """
 
         messages = []
         for (field_name, field) in self.fields.items():
+            # Skip deferred values that have not been retrieved.
+            if isinstance(self.values.get(field_name, None), DeferredValue):
+                continue
+
             value = getattr(self, field_name)
             if value is None and self.check_condition(
                     field.required_if, default=False):
