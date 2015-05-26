@@ -354,7 +354,7 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         with self.assertRaises(LookupError):
             self.cls.get(5)
 
-    def test_get_update(self):
+    def test_get_save(self):
         inst_a = self.cls.get(1)
         inst_b = self.cls.get(2)
 
@@ -362,10 +362,10 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertEqual(inst_b.widget_number, None)
 
         inst_a.widget_number = 10
-        inst_a.update()
+        inst_a.save()
 
         inst_b.widget_number = 20
-        inst_b.update()
+        inst_b.save()
 
         del inst_a
         del inst_b
@@ -375,22 +375,22 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertTrue(10 in widget_numbers)
         self.assertTrue(20 in widget_numbers)
 
-    def test_update_no_change(self):
+    def test_save_no_change(self):
         # Update all features to set calculated field values.
         for feature in self.cls.iter(update=True):
-            feature.update()
+            feature.save()
 
         # Try updating features without changing anything.
         update_count = 0
         for feature in self.cls.iter(update=True):
-            update_count += int(feature.update())
+            update_count += int(feature.save())
         self.assertEqual(update_count, 0, 'Features updated unnecessarily')
 
         # Change a value, and check the update count.
         update_count = 0
         for feature in self.cls.iter(update=True):
             feature.widget_number = 500
-            update_count += int(feature.update())
+            update_count += int(feature.save())
         self.assertEqual(update_count, 3, 'Features not updated after change')
 
     def test_get_field(self):

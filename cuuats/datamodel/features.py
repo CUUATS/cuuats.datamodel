@@ -260,7 +260,7 @@ class BaseFeature(object):
 
         return [getattr(self, f) for f in self.fields.keys()]
 
-    def update(self):
+    def save(self):
         """
         Update the corresponding row in the data source.
         """
