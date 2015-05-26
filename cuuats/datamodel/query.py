@@ -247,4 +247,9 @@ class Manager(object):
             raise AttributeError('Manager is not accessible '
                                  'from feature instances')
 
+        if owner.source is None:
+            raise AttributeError(
+                'Feature class must be registered with a data source before '
+                'it can be queried')
+
         return self.queryset_class(owner)
