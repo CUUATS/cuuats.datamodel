@@ -1,15 +1,7 @@
 import warnings
+from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.scales import BaseScale
-
-
-class DeferredValue(object):
-    """
-    A field value that is only retrieved from the database when needed.
-    """
-
-    def __init__(self, field_name, db_name):
-        self.field_name = field_name
-        self.db_name = db_name
+from cuuats.datamodel.query import RelatedManager
 
 
 class BaseField(object):
@@ -45,7 +37,8 @@ class BaseField(object):
     def __repr__(self):
         return '%s: %s' % (self.__class__.__name__, self.label)
 
-    def register(self, source, field_name, layer_name, layer_fields):
+    def register(self, source, feature_class, field_name, layer_name,
+                 layer_fields):
         """
         Register this field with the data source.
         """
@@ -311,8 +304,6 @@ class RelationshipSummaryField(BatchField):
 
     def __init__(self, name, **kwargs):
         super(RelationshipSummaryField, self).__init__(name, **kwargs)
-
-        # Overridden by subclasses
         self.rel = kwargs.get('relationship', None)
         self.summary_field = kwargs.get('summary_field', None)
         self.statistic = kwargs.get('statistic', None)
@@ -328,3 +319,46 @@ class RelationshipSummaryField(BatchField):
             {self.name: [self.summary_field, self.statistic]},
             self.where_clause,
             self.default)
+
+
+class ForeignKey(BaseField):
+
+    default_storage = {
+        'field_type': 'SHORT',
+    }
+
+    def __init__(self, name, **kwargs):
+        super(ForeignKey, self).__init__(name, **kwargs)
+        # TODO: Allow origin_class to be the name of the class instead
+        # of the actual class.
+        self.origin_class = kwargs.get('origin_class', None)
+        self.related_name = kwargs.get('related_name', None)
+
+    def register(self, source, feature_class, field_name, layer_name,
+                 layer_fields):
+        """
+        Register this field with the data source.
+        """
+
+        super(ForeignKey, self).register(
+            source, feature_class, field_name, layer_name, layer_fields)
+
+        if self.related_name is None:
+            self.related_name = feature_class.__name__.lower() + '_set'
+
+        setattr(self.origin_class, self.related_name,
+                RelatedManager(feature_class, field_name))
+
+    def __get__(self, instance, owner):
+        oid = super(ForeignKey, self).__get__(instance, owner)
+        if oid is None:
+            return None
+        return self.origin_class.objects.get({
+            self.origin_class.oid_field_name: oid
+        })
+
+    def __set__(self, instance, value):
+        if isinstance(value, self.origin_class):
+            super(ForeignKey, self).__set__(value.oid)
+        else:
+            super(ForeignKey, self).__set__(value)

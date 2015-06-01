@@ -1,9 +1,10 @@
 import re
 from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
-    DeferredValue
+    ForeignKey
+from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.attachments import AttachmentRelationship
-from cuuats.datamodel.query import Q, Manager
+from cuuats.datamodel.query import Q, Manager, SQLCompiler
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
@@ -16,7 +17,8 @@ def require_source(fn):
     def wrapper(*args, **kwargs):
         if getattr(args[0], 'source', None) is None:
             raise AttributeError(
-                'Feature class must be registered with a data source')
+                'Feature class %s must be registered with a data source' %
+                (args[0].__name__,))
         return fn(*args, **kwargs)
 
     return wrapper
@@ -51,7 +53,7 @@ class BaseFeature(object):
         # Register fields with the source
         layer_fields = source.get_layer_fields(layer_name)
         for (field_name, field) in cls.get_fields().items():
-            field.register(source, field_name, cls.name, layer_fields)
+            field.register(source, cls, field_name, cls.name, layer_fields)
             if isinstance(field, OIDField):
                 cls.oid_field_name = field_name
 
@@ -119,7 +121,7 @@ class BaseFeature(object):
         # Reregister fields
         layer_fields = cls.source.get_layer_fields(cls.name)
         for (field_name, field) in cls_fields.items():
-            field.register(cls.source, field_name, cls.name, layer_fields)
+            field.register(cls.source, cls, field_name, cls.name, layer_fields)
 
     @require_source
     def __init__(self, **kwargs):
@@ -137,12 +139,21 @@ class BaseFeature(object):
         return '<%s: %s>' % (self.__class__.__name__, name)
 
     @property
+    def oid(self):
+        """
+        Returns the object ID (primary key) for this feature.
+        """
+
+        return getattr(self, self.oid_field_name)
+
+    @property
     def oid_where(self):
         """
         Where clause for selecting this feature.
         """
 
-        return Q({self.oid_field_name: getattr(self, self.oid_field_name)}).sql
+        compiler = SQLCompiler(self.__class__)
+        return compiler.compile(Q({self.oid_field_name: self.oid}))
 
     def get_field(self, field_name):
         """
@@ -212,11 +223,14 @@ class BaseFeature(object):
         """
         Perform validation on each field in the feature, and return any
         validation error messages. Deferred values that have not been
-        retrieved are skipped.
+        retrieved are skipped, as are foreign keys.
         """
 
         messages = []
         for (field_name, field) in self.fields.items():
+            if isinstance(field, ForeignKey):
+                continue
+
             # Skip deferred values that have not been retrieved.
             if isinstance(self.values.get(field_name, None), DeferredValue):
                 continue
@@ -235,8 +249,9 @@ class BaseFeature(object):
         that have not been retrieved are excluded.
         """
 
-        return [getattr(self, f) for f in self.fields.keys()
-                if not isinstance(self.values.get(f), DeferredValue)]
+        return [self.values.get(n, None) if isinstance(f, ForeignKey) else
+                getattr(self, n) for (n, f) in self.fields.items()
+                if not isinstance(self.values.get(n), DeferredValue)]
 
     def save(self):
         """

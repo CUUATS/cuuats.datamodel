@@ -1,9 +1,10 @@
+from collections import defaultdict
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
-from cuuats.datamodel.fields import DeferredValue
+from cuuats.datamodel.field_values import DeferredValue
 
 
-class Q(object):
+class SQLCondition(object):
 
     OPERATORS = {
         'contains': 'LIKE',
@@ -15,44 +16,125 @@ class Q(object):
         'lte': '<=',
     }
 
+    def __init__(self, field_info, value):
+        self.value = value
+        self.rel_name = None
+        self.field_name, sep, op_name = field_info.rpartition('__')
+        if op_name not in self.OPERATORS:
+            self.field_name = field_info
+            if value is None:
+                op_name = 'exact'
+            else:
+                op_name = 'eq'
+
+        self.operator = self.OPERATORS.get(op_name, None)
+
+        if '__' in self.field_name:
+            self.rel_name, sep, self.field_name = field_info.rpartition('__')
+
+
+class Q(object):
+
     def __init__(self, filters={}, **kwargs):
-        if isinstance(filters, Q):
-            self.sql = filters.sql
-        if isinstance(filters, basestring):
-            self.sql = filters
-        elif isinstance(filters, dict):
-            all_filters = filters.copy()
-            all_filters.update(kwargs)
-            self.sql = self._to_sql(all_filters)
+        self.operator = 'AND'
+        self.negated = False
+        self.children = [
+            SQLCondition(*f) for f in filters.items() + kwargs.items()]
 
     def __and__(self, other):
-        return Q('(%s) AND (%s)' % (self.sql, other.sql))
+        return self._combine(other, 'AND')
 
     def __or__(self, other):
-        return Q('(%s) OR (%s)' % (self.sql, other.sql))
+        return self._combine(other, 'OR')
 
     def __invert__(self):
-        return Q('NOT (%s)' % (self.sql,))
+        q = self._clone()
+        q.negated = not self.negated
+        return q
+
+    def __len__(self):
+        return len(self.children)
 
     def __repr__(self):
-        return '<Q: %s>' % self.sql
+        child_str = ', '.join([str(c) for c in self.children])
+        return '<Q: %s(%s: %s)>' % (
+            self.negated and 'NOT ' or '', self.operator, child_str)
 
-    def _to_sql(self, filters):
-        parts = []
-        for (field_info, value) in filters.items():
-            field_name, sep, op_name = field_info.rpartition('__')
-            if op_name not in self.OPERATORS:
-                field_name = field_info
-                if value is None:
-                    op_name = 'exact'
+    def _clone(self):
+        q = self.__class__()
+        q.operator = self.operator
+        q.negated = self.negated
+        q.children = self.children[:]
+        return q
+
+    def _rels(self):
+        return set([f.rel_name for f in self.children if
+                    isinstance(f, SQLCondition) and f.rel_name is not None])
+
+    def _op_match(self, op):
+        return op == self.operator or len(self) == 1
+
+    def _can_merge(self, other, op):
+        # Don't merge Q objects that traverse the same relationships.
+        # TODO: This determintation should be tied to which QuerySet.filter()
+        # call the Q objects came from.
+        if self._rels() & other._rels():
+            return False
+        return self._op_match(op) and other._op_match(op) and \
+            self.negated == other.negated
+
+    def _can_append(self, other, op):
+        return self._op_match(op) and not self.negated
+
+    def _combine(self, other, op):
+        if self._can_merge(other, op):
+            q = self._clone()
+            q.children.extend(other.children)
+        elif self._can_append(other, op):
+            q = self._clone()
+            q.children.append(other._clone())
+        elif other._can_append(self, op):
+            q = other._clone()
+            q.children.append(self._clone())
+        else:
+            q = self.__class__()
+            q.children = [self._clone(), other._clone()]
+        q.operator = op
+        return q
+
+
+class SQLCompiler(object):
+
+    def __init__(self, feature_class=None):
+        self.feature_class = feature_class
+
+    def compile(self, q, inner=False):
+        sep = ' %s ' % (q.operator)
+        subquery_map = defaultdict(list)
+        sql_parts = []
+
+        for child in q.children:
+            if isinstance(child, Q):
+                sql_parts.append(self.compile(child))
+            else:
+                value_str = self._to_string(child.value, child.operator)
+                if child.rel_name is None:
+                    sql_parts.append(' '.join([child.field_name,
+                                               child.operator, value_str]))
                 else:
-                    op_name = 'eq'
+                    subquery_map[child.rel_name].append(
+                        (child.field_name, child.operator, value_str))
 
-            operator = self.OPERATORS.get(op_name, None)
-            parts.append(' '.join([field_name, operator,
-                         self._to_string(value, operator)]))
+        # Compile subqueries
+        sql_parts.extend([self._subquery(rel, fields, sep)
+                          for (rel, fields) in subquery_map.items()])
 
-        return ' AND '.join(parts)
+        sql = sep.join(sql_parts)
+        if len(sql_parts) > 1 and (q.negated or inner):
+            sql = '(%s)' % (sql,)
+        if q.negated:
+            sql = 'NOT %s' % (sql,)
+        return sql
 
     def _to_string(self, value, operator):
         if value is None:
@@ -66,17 +148,33 @@ class Q(object):
         # TODO: Deal with dates and other common types.
         return str(value)
 
+    def _resolve_rel(self, rel_name):
+        field = self.feature_class.__dict__.get(rel_name)
+        if isinstance(field, RelatedManager):
+            destination = field.destination_class
+            return [self.feature_class.oid_field_name, field.foreign_key,
+                    destination.name]
+        # Field is a ForeignKey.
+        origin = field.origin_class
+        return [field.db_name, origin.oid_field_name, origin.name]
+
+    def _subquery(self, rel_name, fields, sep):
+        where_clause = sep.join([' '.join(f) for f in fields])
+        return '%s IN (SELECT %s FROM %s WHERE %s)' % \
+            tuple(self._resolve_rel(rel_name) + [where_clause])
+
 
 class Query(object):
 
-    def __init__(self, fields=[]):
+    def __init__(self, fields, compiler):
         self.fields = fields
+        self.compiler = compiler
         self._where = None
         self._order_by = None
         self._group_by = None
 
     def clone(self):
-        clone = self.__class__(self.fields)
+        clone = self.__class__(self.fields, self.compiler)
         clone._where = self._where
         clone._order_by = self._order_by
         clone._group_by = self._group_by
@@ -109,7 +207,7 @@ class Query(object):
     def where(self):
         if self._where is None:
             return None
-        return self._where.sql
+        return self.compiler.compile(self._where)
 
     @property
     def prefix(self):
@@ -143,9 +241,15 @@ class QuerySet(object):
     def _make_query(self, feature_class):
         fields = [f.db_name for f in feature_class.get_fields().values()
                   if not f.deferred]
-        query = Query(fields)
+        compiler = SQLCompiler(feature_class)
+        query = Query(fields, compiler)
         query.set_order([(feature_class.oid_field_name, 'ASC')])
         return query
+
+    def _make_q(self, *args, **kwargs):
+        if args and isinstance(args[0], Q):
+            return args[0] & Q(*args[1:], **kwargs)
+        return Q(*args, **kwargs)
 
     def _fetch_all(self):
         if not self._cache:
@@ -182,12 +286,12 @@ class QuerySet(object):
 
     def filter(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_q(Q(*args, **kwargs))
+        clone.query.add_q(self._make_q(*args, **kwargs))
         return clone
 
     def exclude(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_q(~Q(*args, **kwargs))
+        clone.query.add_q(~self._make_q(*args, **kwargs))
         return clone
 
     def order_by(self, fields):
@@ -198,7 +302,7 @@ class QuerySet(object):
     # Methods that do not return QuerySets
     def get(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_q(Q(*args, **kwargs))
+        clone.query.add_q(self._make_q(*args, **kwargs))
         clone._fetch_all()
         clone_length = len(clone)
         if clone_length == 1:
@@ -271,7 +375,30 @@ class Manager(object):
 
         if owner.source is None:
             raise AttributeError(
-                'Feature class must be registered with a data source before '
-                'it can be queried')
+                'Feature class %s must be registered with a data source '
+                'before it can be queried' % (owner.__name__,))
 
         return self.queryset_class(owner)
+
+
+class RelatedManager(Manager):
+
+    def __init__(self, destination_class, foreign_key,
+                 queryset_class=QuerySet):
+        super(RelatedManager, self).__init__(queryset_class)
+        self.destination_class = destination_class
+        self.foreign_key = foreign_key
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            raise AttributeError('Related Manager is only accessible '
+                                 'from feature instances')
+
+        if self.destination_class.source is None:
+            raise AttributeError(
+                'Related class must be registered with a data source before '
+                'it can be queried')
+
+        return self.queryset_class(self.destination_class).filter({
+            self.foreign_key: instance.oid
+        })
