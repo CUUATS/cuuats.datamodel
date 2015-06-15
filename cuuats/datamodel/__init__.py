@@ -7,3 +7,4 @@ from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BaseScale, BreaksScale, DictScale, \
     StaticScale
 from cuuats.datamodel.helpers import FeatureClassManager
+from cuuats.datamodel.query import Q

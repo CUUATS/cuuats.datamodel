@@ -11,6 +11,7 @@ class SQLCondition(object):
         'eq': '=',
         'exact': 'IS',
         'gt': '>',
+        'in': 'IN',
         'lt': '<',
         'gte': '>=',
         'lte': '<=',
@@ -144,6 +145,10 @@ class SQLCompiler(object):
             if operator == 'LIKE':
                 return "'%%%s%%'" % (value,)
             return "'%s'" % (value,)
+
+        elif isinstance(value, (list, tuple)):
+            return '(%s)' % (', '.join(
+                [self._to_string(v, operator) for v in value]), )
 
         # TODO: Deal with dates and other common types.
         return str(value)
