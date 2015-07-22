@@ -43,7 +43,7 @@ class BaseField(object):
         Register this field with the data source.
         """
 
-        layer_field = layer_fields.get(field_name, None)
+        layer_field = layer_fields.get(self.db_name or field_name, None)
         if layer_field is None:
             warnings.warn('%s is not a field of %s' % (
                 field_name, layer_name))
@@ -166,6 +166,16 @@ class NumericField(BaseField):
             messages.append('%s out of range' % (self.label,))
 
         return messages
+
+
+class BlobField(BaseField):
+    """
+    A field for storing blob data.
+    """
+
+    def __init__(self, label, **kwargs):
+        super(BlobField, self).__init__(label, **kwargs)
+        self.deferred = kwargs.get('deferred', True)
 
 
 class CalculatedField(BaseField):
@@ -347,7 +357,7 @@ class ForeignKey(BaseField):
             self.related_name = feature_class.__name__.lower() + '_set'
 
         setattr(self.origin_class, self.related_name,
-                RelatedManager(feature_class, field_name))
+                RelatedManager(feature_class, self.db_name))
 
     def __get__(self, instance, owner):
         oid = super(ForeignKey, self).__get__(instance, owner)

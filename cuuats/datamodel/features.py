@@ -1,9 +1,9 @@
+import os
 import re
 from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
-    ForeignKey
+    ForeignKey, NumericField, StringField, BlobField
 from cuuats.datamodel.field_values import DeferredValue
-from cuuats.datamodel.attachments import AttachmentRelationship
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
@@ -46,9 +46,13 @@ class BaseFeature(object):
         cls.source = source
         cls.name = layer_name
 
-        attachment_info = source.get_attachment_info(layer_name)
-        if attachment_info is not None:
-            cls.attachments = AttachmentRelationship(*attachment_info)
+        if not issubclass(cls, BaseAttachment):
+            attachment_info = source.get_attachment_info(layer_name)
+            if attachment_info is not None:
+                Attachment = attachment_class_factory(
+                    cls, attachment_info.foreign_key)
+                Attachment.register(cls.source, attachment_info.destination)
+                cls.attachment_class = Attachment
 
         # Register fields with the source
         layer_fields = source.get_layer_fields(layer_name)
@@ -302,3 +306,77 @@ class BaseFeature(object):
             return default
 
         return bool(self.eval(condition))
+
+
+class BaseAttachment(BaseFeature):
+    """
+    A file attached to an ArcGIS feature class.
+    """
+
+    attachment_id = NumericField(
+        'Attachment ID',
+        db_name='ATTACHMENTID')
+
+    file_name = StringField(
+        'File Name',
+        db_name='ATT_NAME')
+
+    content_type = StringField(
+        'Content Type',
+        db_name='CONTENT_TYPE')
+
+    file_size = NumericField(
+        'File Size',
+        db_name='DATA_SIZE')
+
+    data = BlobField(
+        'File Data',
+        db_name='DATA')
+
+    @property
+    def has_data(self):
+        """
+        Does this attachment have data?
+        """
+
+        return self.data is not None
+
+    def save_to(self, path, filename=None, overwrite=False, data=None):
+        """
+        Save the attached file to the specified directory path.
+        """
+
+        if not self.has_data and data is None:
+            raise ValueError('Cannot save an attachment with no data')
+
+        if data is None:
+            data = self.data.tobytes()
+
+        file_path = os.path.join(path, filename or self.file_name)
+        if os.path.isfile(file_path) and not overwrite:
+            raise IOError('%s already exists' % (file_path,))
+
+        with open(file_path, 'wb') as file:
+            file.write(data)
+
+
+def attachment_class_factory(
+        origin_class, foreign_key, related_name='attachments',
+        base_class=BaseAttachment):
+    """
+    Each feature class needs a unique attachment class so that it can be
+    registered for the appropriate attachment table in the data source.
+    """
+
+    class Attachment(base_class):
+        """
+        A file attachment.
+        """
+
+        feature = ForeignKey(
+            'Feature',
+            db_name=foreign_key,
+            origin_class=origin_class,
+            related_name=related_name)
+
+    return Attachment
