@@ -372,7 +372,7 @@ class BaseAttachment(BaseFeature):
             raise ValueError('Cannot save an attachment with no data')
 
         if data is None:
-            data = self.data.tobytes()
+            data = self.data
 
         file_path = os.path.join(path, filename or self.file_name)
         if os.path.isfile(file_path) and not overwrite:

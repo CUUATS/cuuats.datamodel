@@ -104,8 +104,15 @@ class DataSource(object):
         with cursor_factory(layer_path, field_names, where_clause,
                             sql_clause=(prefix, postfix)) as cursor:
             for row in cursor:
+
+                # Load memoryview data into memory so that we don't lose access
+                # to it in the next iteration.
+                # TODO: Is there a better way to deal with this issue?
+                values = [v.tobytes() if isinstance(v, memoryview) else v
+                          for v in row]
+
                 if limit is None or limit > 0:
-                    yield (row, cursor)
+                    yield (values, cursor)
                     if limit is not None:
                         limit -= 1
                 else:
