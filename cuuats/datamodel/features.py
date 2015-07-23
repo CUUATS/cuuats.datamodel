@@ -50,7 +50,8 @@ class BaseFeature(object):
             attachment_info = source.get_attachment_info(layer_name)
             if attachment_info is not None:
                 Attachment = attachment_class_factory(
-                    cls, attachment_info.foreign_key)
+                    cls, attachment_info.primary_key,
+                    attachment_info.foreign_key)
                 Attachment.register(cls.source, attachment_info.destination)
                 cls.attachment_class = Attachment
 
@@ -67,6 +68,9 @@ class BaseFeature(object):
         Returns an OrderedDict containing the fields for this feature.
         """
 
+        # TODO: Cache the results of get_fields, and provide a mechanism
+        # for clearing the cache.
+
         fields = []
         # Walk the inheritance chain looking for fields.
         for subcls in type.mro(cls):
@@ -74,6 +78,24 @@ class BaseFeature(object):
                           subcls.__dict__.items()
                           if isinstance(f, BaseField)])
         return OrderedDict([d[2:] for d in sorted(fields)])
+
+    @classmethod
+    def get_db_name(cls, field_name):
+        """
+        Get the database name for a field.
+        """
+
+        return cls.get_fields()[field_name].db_name or field_name
+
+    @classmethod
+    def get_field_name(cls, db_name):
+        """
+        Given the database name, get the corresponding field name.
+        """
+
+        for (field_name, field) in cls.get_fields().items():
+            if (field.db_name or field_name) == db_name:
+                return field_name
 
     @classmethod
     @require_source
@@ -313,7 +335,7 @@ class BaseAttachment(BaseFeature):
     A file attached to an ArcGIS feature class.
     """
 
-    attachment_id = NumericField(
+    attachment_id = OIDField(
         'Attachment ID',
         db_name='ATTACHMENTID')
 
@@ -361,7 +383,7 @@ class BaseAttachment(BaseFeature):
 
 
 def attachment_class_factory(
-        origin_class, foreign_key, related_name='attachments',
+        origin_class, primary_key, foreign_key, related_name='attachments',
         base_class=BaseAttachment):
     """
     Each feature class needs a unique attachment class so that it can be
@@ -377,6 +399,7 @@ def attachment_class_factory(
             'Feature',
             db_name=foreign_key,
             origin_class=origin_class,
+            primary_key=primary_key,
             related_name=related_name)
 
     return Attachment

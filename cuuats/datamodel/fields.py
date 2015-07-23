@@ -114,6 +114,20 @@ class GeometryField(BaseField):
         self.db_name = kwargs.get('db_name', 'SHAPE@')
         self.deferred = kwargs.get('deferred', True)
 
+    def register(self, source, feature_class, field_name, layer_name,
+                 layer_fields):
+        """
+        Register this field with the data source.
+        """
+
+        # TODO: Figure out how to check whether the geometry field exists,
+        # since the db_name is a special ArcGIS keyword that is not returned
+        # by ListFields.
+
+        self.name = field_name
+        if self.db_name is None:
+            self.db_name = field_name
+
     def validate(self, value):
         """
         Performs validation on the given value, and returns any error messages.
@@ -342,6 +356,8 @@ class ForeignKey(BaseField):
         # TODO: Allow origin_class to be the name of the class instead
         # of the actual class.
         self.origin_class = kwargs.get('origin_class', None)
+        self.primary_key = kwargs.get('primary_key', None)
+        self.pk_field_name = None
         self.related_name = kwargs.get('related_name', None)
 
     def register(self, source, feature_class, field_name, layer_name,
@@ -353,22 +369,27 @@ class ForeignKey(BaseField):
         super(ForeignKey, self).register(
             source, feature_class, field_name, layer_name, layer_fields)
 
+        if self.primary_key is None:
+            self.primary_key = self.origin_class.oid_field_name
+
+        self.pk_field_name = self.origin_class.get_field_name(self.primary_key)
+
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
 
         setattr(self.origin_class, self.related_name,
-                RelatedManager(feature_class, self.db_name))
+                RelatedManager(feature_class, self.db_name, self.primary_key))
 
     def __get__(self, instance, owner):
-        oid = super(ForeignKey, self).__get__(instance, owner)
-        if oid is None:
+        value = super(ForeignKey, self).__get__(instance, owner)
+        if value is None:
             return None
         return self.origin_class.objects.get({
-            self.origin_class.oid_field_name: oid
+            self.pk_field_name: value
         })
 
     def __set__(self, instance, value):
         if isinstance(value, self.origin_class):
-            super(ForeignKey, self).__set__(value.oid)
+            super(ForeignKey, self).__set__(getattr(value, self.pk_field_name))
         else:
             super(ForeignKey, self).__set__(value)

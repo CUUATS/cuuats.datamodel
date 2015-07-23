@@ -120,11 +120,13 @@ class SQLCompiler(object):
             else:
                 value_str = self._to_string(child.value, child.operator)
                 if child.rel_name is None:
-                    sql_parts.append(' '.join([child.field_name,
-                                               child.operator, value_str]))
+                    sql_parts.append(' '.join([
+                        self._resolve_field_name(child.field_name),
+                        child.operator, value_str]))
                 else:
                     subquery_map[child.rel_name].append(
-                        (child.field_name, child.operator, value_str))
+                        (self._resolve_field_name(child.field_name),
+                         child.operator, value_str))
 
         # Compile subqueries
         sql_parts.extend([self._subquery(rel, fields, sep)
@@ -152,6 +154,9 @@ class SQLCompiler(object):
 
         # TODO: Deal with dates and other common types.
         return str(value)
+
+    def _resolve_field_name(self, field_name):
+        return self.feature_class.get_db_name(field_name)
 
     def _resolve_rel(self, rel_name):
         field = self.feature_class.__dict__.get(rel_name)
@@ -248,7 +253,8 @@ class QuerySet(object):
                   if not f.deferred]
         compiler = SQLCompiler(feature_class)
         query = Query(fields, compiler)
-        query.set_order([(feature_class.oid_field_name, 'ASC')])
+        oid_field = feature_class.get_fields()[feature_class.oid_field_name]
+        query.set_order([(oid_field.db_name, 'ASC')])
         return query
 
     def _make_q(self, *args, **kwargs):
@@ -328,7 +334,7 @@ class QuerySet(object):
 
     def iterator(self, limit=None):
         for (row, cursor) in self.feature_class.source.iter_rows(
-                self.feature_class.name, self._db_names, False,
+                self.feature_class.name, self.query.fields, False,
                 self.query.where, limit, self.query.prefix,
                 self.query.postfix):
             yield self._feature(row)
@@ -388,11 +394,12 @@ class Manager(object):
 
 class RelatedManager(Manager):
 
-    def __init__(self, destination_class, foreign_key,
+    def __init__(self, destination_class, foreign_key, primary_key,
                  queryset_class=QuerySet):
         super(RelatedManager, self).__init__(queryset_class)
         self.destination_class = destination_class
         self.foreign_key = foreign_key
+        self.primary_key = primary_key
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -404,6 +411,9 @@ class RelatedManager(Manager):
                 'Related class must be registered with a data source before '
                 'it can be queried')
 
+        fk_field_name = self.destination_class.get_field_name(self.foreign_key)
+        pk_field_name = instance.__class__.get_field_name(self.primary_key)
+
         return self.queryset_class(self.destination_class).filter({
-            self.foreign_key: instance.oid
+            fk_field_name: getattr(instance, pk_field_name)
         })
