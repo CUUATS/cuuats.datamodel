@@ -240,6 +240,7 @@ class QuerySet(object):
         self._field_name_cache = None
         self._db_name_cache = None
         self._cache = []
+        self._prefetch_rels = []
 
     def __len__(self):
         return self.count()
@@ -265,6 +266,33 @@ class QuerySet(object):
     def _fetch_all(self):
         if not self._cache:
             self._cache = list(self.iterator())
+
+        # Prefetch related features.
+        for rel_name in self._prefetch_rels:
+            rel = self.feature_class.get_fields().get('rel_name', None)
+            if rel is None:
+                raise AttributeError(
+                    'Relationship %s does not exist.' % (rel_name,))
+            elif isinstance(rel, RelatedManager):
+                # rel is a RelatedManager.
+                origin = self.feature_class
+                destination = rel.destination_class
+                fk_field_name = destination.get_field_name(rel.foreign_key)
+                pk_field_name = origin.get_field_name(rel.primary_key)
+
+                oid_filter = '%s__IN' % (fk_field_name,)
+                pks = [getattr(f, pk_field_name) for f in self._cache]
+                dest_features = destination.objects.filter(**{oid_filter: pks})
+
+                dest_map = defaultdict(list)
+                for feature in dest_features:
+                    dest_map[getattr(feature, fk_field_name)].append(feature)
+
+            else:
+                # rel is a ForeignKey.
+                related_name = rel.origin_class.related_name
+                rel.origin_class.objects.filter(
+                    '%s__%s')
 
     def _clone(self):
         clone = self.__class__(self.feature_class, self.query.clone())
@@ -372,6 +400,11 @@ class QuerySet(object):
 
     def delete(self):
         raise NotImplementedError('QuerySet deletions are not yet supported')
+
+    def prefetch_related(self, *rels):
+        for rel in rels:
+            if rel not in self._prefetch_rels:
+                self._prefetch_rels.append(rel)
 
 
 class Manager(object):
