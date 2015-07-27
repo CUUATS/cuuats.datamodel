@@ -239,8 +239,8 @@ class QuerySet(object):
         self.query = query or self._make_query(feature_class)
         self._field_name_cache = None
         self._db_name_cache = None
-        self._cache = []
-        self._prefetch_rels = []
+        self._cache = None
+        self._prefetch_rel = []
 
     def __len__(self):
         return self.count()
@@ -264,15 +264,15 @@ class QuerySet(object):
         return Q(*args, **kwargs)
 
     def _fetch_all(self):
-        if not self._cache:
+        if self._cache is None:
             self._cache = list(self.iterator())
             if self._cache:
-                self._prefetch_related()
+                self._prefetch()
 
-    def _prefetch_related(self):
+    def _prefetch(self):
         # Prefetch related features.
-        for rel_name in self._prefetch_rels:
-            rel = self.feature_class.get_fields().get('rel_name', None)
+        for rel_name in self._prefetch_rel:
+            rel = self.feature_class.__dict__.get(rel_name, None)
             if isinstance(rel, RelatedManager):
                 self._prefetch_related_manager(rel_name, rel)
             elif rel is not None and rel.__name__ == 'ForeignKey':
@@ -288,13 +288,13 @@ class QuerySet(object):
         pk_field_name = origin.get_field_name(rel.primary_key)
         fk_field_name = destination.get_field_name(rel.foreign_key)
 
-        pk_filter = '%s__IN' % (fk_field_name,)
+        pk_filter = '%s__in' % (fk_field_name,)
         pks = [getattr(f, pk_field_name) for f in self._cache]
-        dest_features = destination.objects.filter(**{pk_filter: pks})
+        dest_features = destination.objects.filter({pk_filter: pks})
 
         dest_map = defaultdict(list)
         for feature in dest_features:
-            dest_map[getattr(feature, fk_field_name)].append(feature)
+            dest_map[feature.values.get(fk_field_name)].append(feature)
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = dest_map[
@@ -306,21 +306,26 @@ class QuerySet(object):
         pk_field_name = rel.pk_field_name
         fk_field_name = rel_name
 
-        fk_filter = '%s__IN' % (pk_field_name,)
+        fk_filter = '%s__in' % (pk_field_name,)
         fks = [getattr(f, fk_field_name) for f in self._cache]
-        origin_features = origin.objects.filter(**{fk_filter: fks})
+        origin_features = origin.objects.filter({fk_filter: fks})
 
         origin_map = dict(
             [(getattr(f, pk_field_name), f) for f in origin_features])
 
         for feature in self._cache:
-            feature._prefetch_cache[rel_name] = origin_map[
-                getattr(feature, fk_field_name)]
+            feature._prefetch_cache[rel_name] = origin_map.get(
+                feature.values.get(fk_field_name), [])
 
-    def _clone(self):
+    def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())
         clone._field_name_cache = self._field_name_cache
         clone._db_name_cache = self._db_name_cache
+        clone._prefetch_rel = self._prefetch_rel
+
+        if preserve_cache:
+            clone._cache = self._cache
+
         return clone
 
     @property
@@ -344,7 +349,7 @@ class QuerySet(object):
 
     # Methods that return QuerySets
     def all(self):
-        return self._clone()
+        return self._clone(preserve_cache=True)
 
     def filter(self, *args, **kwargs):
         clone = self._clone()
@@ -376,7 +381,7 @@ class QuerySet(object):
     def count(self):
         # TODO: Investigate whether using selection would be faster in cases
         # where the results are not already cached.
-        if self._cache:
+        if self._cache is not None:
             return len(self._cache)
 
         return self.feature_class.source.count_rows(
@@ -391,8 +396,10 @@ class QuerySet(object):
             yield self._feature(row)
 
     def first(self):
-        if self._cache:
-            return self._cache[0]
+        if self._cache is not None:
+            if self._cache:
+                return self._cache[0]
+            return None
 
         results = list(self.iterator(limit=1))
         if results:
@@ -400,8 +407,10 @@ class QuerySet(object):
         return None
 
     def last(self):
-        if self._cache:
-            return self._cache[-1]
+        if self._cache is not None:
+            if self._cache:
+                return self._cache[-1]
+            return None
 
         clone = self._clone()
         clone.query.reverse_order()
@@ -426,8 +435,9 @@ class QuerySet(object):
 
     def prefetch_related(self, *rels):
         for rel in rels:
-            if rel not in self._prefetch_rels:
-                self._prefetch_rels.append(rel)
+            if rel not in self._prefetch_rel:
+                self._prefetch_rel.append(rel)
+        return self
 
 
 class Manager(object):
@@ -476,6 +486,6 @@ class RelatedManager(Manager):
         })
 
         # If we have prefetched related features, populate the QuerySet cache.
-        qs._cache = instance._prefetch_cache.get(self.name, [])
+        qs._cache = instance._prefetch_cache.get(self.name, None)
 
         return qs
