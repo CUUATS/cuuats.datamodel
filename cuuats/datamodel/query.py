@@ -266,33 +266,56 @@ class QuerySet(object):
     def _fetch_all(self):
         if not self._cache:
             self._cache = list(self.iterator())
+            if self._cache:
+                self._prefetch_related()
 
+    def _prefetch_related(self):
         # Prefetch related features.
         for rel_name in self._prefetch_rels:
             rel = self.feature_class.get_fields().get('rel_name', None)
-            if rel is None:
+            if isinstance(rel, RelatedManager):
+                self._prefetch_related_manager(rel_name, rel)
+            elif rel is not None and rel.__name__ == 'ForeignKey':
+                self._prefecth_foreign_key(rel_name, rel)
+            else:
                 raise AttributeError(
                     'Relationship %s does not exist.' % (rel_name,))
-            elif isinstance(rel, RelatedManager):
-                # rel is a RelatedManager.
-                origin = self.feature_class
-                destination = rel.destination_class
-                fk_field_name = destination.get_field_name(rel.foreign_key)
-                pk_field_name = origin.get_field_name(rel.primary_key)
 
-                oid_filter = '%s__IN' % (fk_field_name,)
-                pks = [getattr(f, pk_field_name) for f in self._cache]
-                dest_features = destination.objects.filter(**{oid_filter: pks})
+    def _prefetch_related_manager(self, rel_name, rel):
+        # rel is a RelatedManager.
+        origin = self.feature_class
+        destination = rel.destination_class
+        pk_field_name = origin.get_field_name(rel.primary_key)
+        fk_field_name = destination.get_field_name(rel.foreign_key)
 
-                dest_map = defaultdict(list)
-                for feature in dest_features:
-                    dest_map[getattr(feature, fk_field_name)].append(feature)
+        pk_filter = '%s__IN' % (fk_field_name,)
+        pks = [getattr(f, pk_field_name) for f in self._cache]
+        dest_features = destination.objects.filter(**{pk_filter: pks})
 
-            else:
-                # rel is a ForeignKey.
-                related_name = rel.origin_class.related_name
-                rel.origin_class.objects.filter(
-                    '%s__%s')
+        dest_map = defaultdict(list)
+        for feature in dest_features:
+            dest_map[getattr(feature, fk_field_name)].append(feature)
+
+        for feature in self._cache:
+            feature._prefetch_cache[rel_name] = dest_map[
+                getattr(feature, pk_field_name)]
+
+    def _prefetch_foreign_key(self, rel_name, rel):
+        # rel is a ForeignKey.
+        origin = rel.origin_class
+        pk_field_name = rel.pk_field_name
+        fk_field_name = rel_name
+
+        fk_filter = '%s__IN' % (pk_field_name,)
+        fks = [getattr(f, fk_field_name) for f in self._cache]
+        origin_features = origin.objects.filter(**{fk_filter: fks})
+
+        origin_map = dict(
+            [(getattr(f, pk_field_name), f) for f in origin_features])
+
+        for feature in self._cache:
+            feature._prefetch_cache[rel_name] = origin_map[
+                getattr(feature, fk_field_name)]
 
     def _clone(self):
         clone = self.__class__(self.feature_class, self.query.clone())
@@ -427,9 +450,10 @@ class Manager(object):
 
 class RelatedManager(Manager):
 
-    def __init__(self, destination_class, foreign_key, primary_key,
+    def __init__(self, name, destination_class, foreign_key, primary_key,
                  queryset_class=QuerySet):
         super(RelatedManager, self).__init__(queryset_class)
+        self.name = name
         self.destination_class = destination_class
         self.foreign_key = foreign_key
         self.primary_key = primary_key
@@ -447,6 +471,11 @@ class RelatedManager(Manager):
         fk_field_name = self.destination_class.get_field_name(self.foreign_key)
         pk_field_name = instance.__class__.get_field_name(self.primary_key)
 
-        return self.queryset_class(self.destination_class).filter({
+        qs = self.queryset_class(self.destination_class).filter({
             fk_field_name: getattr(instance, pk_field_name)
         })
+
+        # If we have prefetched related features, populate the QuerySet cache.
+        qs._cache = instance._prefetch_cache.get(self.name, [])
+
+        return qs

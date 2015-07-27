@@ -378,17 +378,30 @@ class ForeignKey(BaseField):
             self.related_name = feature_class.__name__.lower() + '_set'
 
         setattr(self.origin_class, self.related_name,
-                RelatedManager(feature_class, self.db_name, self.primary_key))
+                RelatedManager(self.related_name, feature_class,
+                               self.db_name, self.primary_key))
 
     def __get__(self, instance, owner):
         value = super(ForeignKey, self).__get__(instance, owner)
         if value is None:
             return None
+
+        # Return the prefetched feature if there is one.
+        prefetched_feature = instance._prefetch_cache.get(self.name, None)
+        if prefetched_feature:
+            return prefetched_feature
+
+        # Otherwise, get the related feature from the database.
         return self.origin_class.objects.get({
             self.pk_field_name: value
         })
 
     def __set__(self, instance, value):
+        # Clear prefetched feature for this relationship.
+        if self.name in instance._prefetch_cache:
+            del instance._prefetch_cache[self.name]
+
+        # Allow setting using the primary key or the feature itself.
         if isinstance(value, self.origin_class):
             super(ForeignKey, self).__set__(getattr(value, self.pk_field_name))
         else:

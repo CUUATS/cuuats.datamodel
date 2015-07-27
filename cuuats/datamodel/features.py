@@ -159,6 +159,7 @@ class BaseFeature(object):
         self.values = kwargs
         self.db_row = [kwargs[f] for f in self.fields.keys() if f in kwargs
                        and not isinstance(kwargs[f], DeferredValue)]
+        self._prefetch_cache = {}
 
     def __repr__(self):
         name = self.name or '(unregistered)'
