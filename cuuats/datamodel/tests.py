@@ -304,7 +304,7 @@ class TestRegisterFeature(SourceFeatureMixin, unittest.TestCase):
 
         self.cls.register(self.source, self.FEATURE_CLASS_NAME)
         self.assertEqual(self.cls.source.path, self.source.path)
-        for (field_name, field) in self.cls.get_fields().items():
+        for (field_name, field) in self.cls.fields.items():
             self.assertEqual(field.name, field_name,
                              'field name is not set correctly')
         self.assertEqual(
@@ -325,19 +325,21 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         field_names = ['OBJECTID', 'widget_name', 'widget_description',
                        'widget_number', 'widget_available', 'widget_price',
                        'widget_number_score', 'Shape']
-        self.assertEqual(self.cls.get_fields().keys(), field_names)
+        self.assertEqual(self.cls.fields.keys(), field_names)
 
         del self.cls.widget_name
         self.cls.widget_name = StringField('Widget Name', required=True)
+        self.cls._fields = None
         self.assertEqual(
-            self.cls.get_fields().keys()[-1], 'widget_name',
+            self.cls.fields.keys()[-1], 'widget_name',
             'fields are not ordered based on creation_index')
 
         del self.cls.widget_name
         self.cls.widget_name = StringField(
             'Widget Name', required=True, order=-1)
+        self.cls._fields = None
         self.assertEqual(
-            self.cls.get_fields().keys()[0], 'widget_name',
+            self.cls.fields.keys()[0], 'widget_name',
             'fields are not ordered base on order argument')
 
     def test_save_no_change(self):
@@ -359,11 +361,9 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
         self.assertEqual(update_count, 3, 'Features not updated after change')
 
     def test_get_field(self):
-        with self.assertRaises(KeyError):
-            self.instance.get_field('NotAField')
-
+        self.assertEqual(self.instance.fields.get('NotAField'), None)
         self.assertTrue(
-            isinstance(self.instance.get_field('widget_name'), StringField))
+            isinstance(self.instance.fields.get('widget_name'), StringField))
 
     def test_set_by_description(self):
         self.instance.set_by_description('widget_available', 'Yes')

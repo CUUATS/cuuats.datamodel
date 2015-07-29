@@ -250,11 +250,11 @@ class QuerySet(object):
         return iter(self._cache)
 
     def _make_query(self, feature_class):
-        fields = [f.db_name for f in feature_class.get_fields().values()
+        fields = [f.db_name for f in feature_class.fields.values()
                   if not f.deferred]
         compiler = SQLCompiler(feature_class)
         query = Query(fields, compiler)
-        oid_field = feature_class.get_fields()[feature_class.oid_field_name]
+        oid_field = feature_class.fields[feature_class.oid_field_name]
         query.set_order([(oid_field.db_name, 'ASC')])
         return query
 
@@ -331,14 +331,14 @@ class QuerySet(object):
     @property
     def _field_names(self):
         if self._field_name_cache is None:
-            self._field_name_cache = self.feature_class.get_fields().keys()
+            self._field_name_cache = self.feature_class.fields.keys()
         return self._field_name_cache
 
     @property
     def _db_names(self):
         if self._db_name_cache is None:
             self._db_name_cache = [
-                f.db_name for f in self.feature_class.get_fields().values()]
+                f.db_name for f in self.feature_class.fields.values()]
         return self._db_name_cache
 
     def _feature(self, row):

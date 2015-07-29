@@ -24,6 +24,23 @@ def require_source(fn):
     return wrapper
 
 
+class FieldManager(object):
+
+    def __get__(self, instance, owner):
+        if getattr(owner, '_fields', None) is None:
+            self._cache_fields(owner)
+        return owner._fields
+
+    def _cache_fields(self, owner):
+        fields = []
+        # Walk the inheritance chain looking for fields.
+        for subcls in type.mro(owner):
+            fields.extend([(f.order, f.creation_index, n, f) for (n, f) in
+                          subcls.__dict__.items()
+                          if isinstance(f, BaseField)])
+        owner._fields = OrderedDict([d[2:] for d in sorted(fields)])
+
+
 class BaseFeature(object):
     """
     Base class used to interact with data stored in a geodatabase feature
@@ -36,6 +53,7 @@ class BaseFeature(object):
     oid_field_name = None
     db_row = None
     objects = Manager()
+    fields = FieldManager()
 
     @classmethod
     def register(cls, source, layer_name):
@@ -57,27 +75,10 @@ class BaseFeature(object):
 
         # Register fields with the source
         layer_fields = source.get_layer_fields(layer_name)
-        for (field_name, field) in cls.get_fields().items():
+        for (field_name, field) in cls.fields.items():
             field.register(source, cls, field_name, cls.name, layer_fields)
             if isinstance(field, OIDField):
                 cls.oid_field_name = field_name
-
-    @classmethod
-    def get_fields(cls):
-        """
-        Returns an OrderedDict containing the fields for this feature.
-        """
-
-        # TODO: Cache the results of get_fields, and provide a mechanism
-        # for clearing the cache.
-
-        fields = []
-        # Walk the inheritance chain looking for fields.
-        for subcls in type.mro(cls):
-            fields.extend([(f.order, f.creation_index, n, f) for (n, f) in
-                          subcls.__dict__.items()
-                          if isinstance(f, BaseField)])
-        return OrderedDict([d[2:] for d in sorted(fields)])
 
     @classmethod
     def get_db_name(cls, field_name):
@@ -85,7 +86,7 @@ class BaseFeature(object):
         Get the database name for a field.
         """
 
-        return cls.get_fields()[field_name].db_name or field_name
+        return cls.fields[field_name].db_name or field_name
 
     @classmethod
     def get_field_name(cls, db_name):
@@ -93,7 +94,7 @@ class BaseFeature(object):
         Given the database name, get the corresponding field name.
         """
 
-        for (field_name, field) in cls.get_fields().items():
+        for (field_name, field) in cls.fields.items():
             if (field.db_name or field_name) == db_name:
                 return field_name
 
@@ -113,7 +114,7 @@ class BaseFeature(object):
         Update the given (or all) batch fields for this feature class.
         """
 
-        fields = [f for (n, f) in cls.get_fields().items()
+        fields = [f for (n, f) in cls.fields.items()
                   if (isinstance(f, BatchField)
                   and (field_names is None or n in field_names))]
 
@@ -132,11 +133,10 @@ class BaseFeature(object):
             raise NotImplementedError('Modification and removal of fields '
                                       'are not yet supported')
 
-        cls_fields = cls.get_fields()
         layer_fields = cls.source.get_layer_fields(cls.name)
         added_fields = []
 
-        for (field_name, field) in cls_fields.items():
+        for (field_name, field) in cls.fields.items():
             if field_name not in layer_fields and field.storage:
                 storage = field.storage
                 if 'field_alias' not in storage:
@@ -146,12 +146,11 @@ class BaseFeature(object):
 
         # Reregister fields
         layer_fields = cls.source.get_layer_fields(cls.name)
-        for (field_name, field) in cls_fields.items():
+        for (field_name, field) in cls.fields.items():
             field.register(cls.source, cls, field_name, cls.name, layer_fields)
 
     @require_source
     def __init__(self, **kwargs):
-        self.fields = self.__class__.get_fields()
         for field_name in kwargs.keys():
             if field_name not in self.fields.keys():
                 raise KeyError('Invalid field name: %s' % (field_name))
@@ -182,15 +181,6 @@ class BaseFeature(object):
         compiler = SQLCompiler(self.__class__)
         return compiler.compile(Q({self.oid_field_name: self.oid}))
 
-    def get_field(self, field_name):
-        """
-        Get the field with the given name.
-        """
-
-        if field_name not in self.fields:
-            raise KeyError('Invalid field name: %s' % (field_name,))
-        return self.fields[field_name]
-
     def get_deferred_values(self, fields=[]):
         """
         Retrieve deferred values from the database.
@@ -212,7 +202,7 @@ class BaseFeature(object):
         description.
         """
 
-        field = self.get_field(field_name)
+        field = self.fields.get(field_name)
         domain = self.source.get_domain(field.domain_name, 'CodedValue')
         code = self.source.get_coded_value(domain.name, description)
         setattr(self, field_name, code)
@@ -223,7 +213,7 @@ class BaseFeature(object):
         domain.
         """
 
-        field = self.get_field(field_name)
+        field = self.fields.get(field_name)
         return self.source.get_coded_value(field.domain_name, description)
 
     def get_description_for(self, field_name, value=None):
@@ -235,7 +225,7 @@ class BaseFeature(object):
         if value is None:
             value = getattr(self, field_name)
 
-        field = self.get_field(field_name)
+        field = self.fields.get(field_name)
         domain = self.source.get_domain(field.domain_name, 'CodedValue')
         return domain.codedValues.get(value, None)
 
