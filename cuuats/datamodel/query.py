@@ -307,7 +307,8 @@ class QuerySet(object):
         fk_field_name = rel_name
 
         fk_filter = '%s__in' % (pk_field_name,)
-        fks = [getattr(f, fk_field_name) for f in self._cache]
+        fks = [f.values.get(fk_field_name, None) for f in self._cache]
+        fks = [fk for fk in fks if fk is not None]
         origin_features = origin.objects.filter({fk_filter: fks})
 
         origin_map = dict(
@@ -315,7 +316,7 @@ class QuerySet(object):
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = origin_map.get(
-                feature.values.get(fk_field_name), [])
+                feature.values.get(fk_field_name), None)
 
     def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())
