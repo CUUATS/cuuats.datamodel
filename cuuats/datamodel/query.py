@@ -156,17 +156,17 @@ class SQLCompiler(object):
         return str(value)
 
     def _resolve_field_name(self, field_name):
-        return self.feature_class.get_db_name(field_name)
+        return self.feature_class.fields.get_db_name(field_name)
 
     def _resolve_rel(self, rel_name):
         field = self.feature_class.__dict__.get(rel_name)
         if isinstance(field, RelatedManager):
             destination = field.destination_class
-            return [self.feature_class.oid_field_name, field.foreign_key,
-                    destination.name]
+            return [self.feature_class.fields.oid_field.name,
+                    field.foreign_key, destination.name]
         # Field is a ForeignKey.
         origin = field.origin_class
-        return [field.db_name, origin.oid_field_name, origin.name]
+        return [field.db_name, origin.fields.oid_field.name, origin.name]
 
     def _subquery(self, rel_name, fields, sep):
         where_clause = sep.join([' '.join(f) for f in fields])
@@ -254,7 +254,7 @@ class QuerySet(object):
                   if not f.deferred]
         compiler = SQLCompiler(feature_class)
         query = Query(fields, compiler)
-        oid_field = feature_class.fields[feature_class.oid_field_name]
+        oid_field = feature_class.fields.oid_field
         query.set_order([(oid_field.db_name, 'ASC')])
         return query
 
@@ -285,8 +285,8 @@ class QuerySet(object):
         # rel is a RelatedManager.
         origin = self.feature_class
         destination = rel.destination_class
-        pk_field_name = origin.get_field_name(rel.primary_key)
-        fk_field_name = destination.get_field_name(rel.foreign_key)
+        pk_field_name = origin.fields.get_name(rel.primary_key)
+        fk_field_name = destination.fields.get_name(rel.foreign_key)
 
         pk_filter = '%s__in' % (fk_field_name,)
         pks = [getattr(f, pk_field_name) for f in self._cache]
@@ -478,8 +478,9 @@ class RelatedManager(Manager):
                 'Related class must be registered with a data source before '
                 'it can be queried')
 
-        fk_field_name = self.destination_class.get_field_name(self.foreign_key)
-        pk_field_name = instance.__class__.get_field_name(self.primary_key)
+        fk_field_name = \
+            self.destination_class.fields.get_name(self.foreign_key)
+        pk_field_name = instance.fields.get_name(self.primary_key)
 
         qs = self.queryset_class(self.destination_class).filter({
             fk_field_name: getattr(instance, pk_field_name)

@@ -2,7 +2,7 @@ import os
 import re
 from collections import OrderedDict
 from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
-    ForeignKey, NumericField, StringField, BlobField
+    ForeignKey, NumericField, StringField, BlobField, GeometryField
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
 
@@ -24,6 +24,40 @@ def require_source(fn):
     return wrapper
 
 
+class FieldSet(OrderedDict):
+
+    def __init__(self, *args, **kwargs):
+        super(FieldSet, self).__init__(*args, **kwargs)
+        self.oid_field = None
+        self.geom_field = None
+        # Set the name and db_name of fields. This also happens during
+        # field registration, but we may need to access these attributes
+        # before the field is registered.
+        for field_name, field in self.items():
+            field.name = field_name
+            field.db_name = field.db_name or field_name
+            if isinstance(field, OIDField):
+                self.oid_field = field
+            elif isinstance(field, GeometryField):
+                self.geom_field = field
+
+    def get_name(self, db_name):
+        """
+        Given the database name, get the corresponding field name.
+        """
+
+        for (field_name, field) in self.items():
+            if (field.db_name or field_name) == db_name:
+                return field_name
+
+    def get_db_name(self, field_name):
+        """
+        Get the database name for a field.
+        """
+
+        return self[field_name].db_name
+
+
 class FieldManager(object):
 
     def __get__(self, instance, owner):
@@ -33,12 +67,14 @@ class FieldManager(object):
 
     def _cache_fields(self, owner):
         fields = []
+
         # Walk the inheritance chain looking for fields.
         for subcls in type.mro(owner):
             fields.extend([(f.order, f.creation_index, n, f) for (n, f) in
                           subcls.__dict__.items()
                           if isinstance(f, BaseField)])
-        owner._fields = OrderedDict([d[2:] for d in sorted(fields)])
+        # Cache the resutling FieldSet.
+        owner._fields = FieldSet([d[2:] for d in sorted(fields)])
 
 
 class BaseFeature(object):
@@ -50,7 +86,6 @@ class BaseFeature(object):
     name = None
     source = None
     attachments = None
-    oid_field_name = None
     db_row = None
     objects = Manager()
     fields = FieldManager()
@@ -77,26 +112,6 @@ class BaseFeature(object):
         layer_fields = source.get_layer_fields(layer_name)
         for (field_name, field) in cls.fields.items():
             field.register(source, cls, field_name, cls.name, layer_fields)
-            if isinstance(field, OIDField):
-                cls.oid_field_name = field_name
-
-    @classmethod
-    def get_db_name(cls, field_name):
-        """
-        Get the database name for a field.
-        """
-
-        return cls.fields[field_name].db_name or field_name
-
-    @classmethod
-    def get_field_name(cls, db_name):
-        """
-        Given the database name, get the corresponding field name.
-        """
-
-        for (field_name, field) in cls.fields.items():
-            if (field.db_name or field_name) == db_name:
-                return field_name
 
     @classmethod
     @require_source
@@ -170,7 +185,7 @@ class BaseFeature(object):
         Returns the object ID (primary key) for this feature.
         """
 
-        return getattr(self, self.oid_field_name)
+        return getattr(self, self.fields.oid_field.name)
 
     @property
     def oid_where(self):
@@ -179,7 +194,7 @@ class BaseFeature(object):
         """
 
         compiler = SQLCompiler(self.__class__)
-        return compiler.compile(Q({self.oid_field_name: self.oid}))
+        return compiler.compile(Q({self.fields.oid_field.name: self.oid}))
 
     def get_deferred_values(self, fields=[]):
         """
@@ -279,7 +294,7 @@ class BaseFeature(object):
         if new_row == self.db_row:
             return False
 
-        oid_field = self.oid_field_name
+        oid_field = self.fields.oid_field.name
         oid = getattr(self, oid_field)
         field_names = [f for f in self.fields.keys()
                        if not isinstance(self.values.get(f), DeferredValue)]

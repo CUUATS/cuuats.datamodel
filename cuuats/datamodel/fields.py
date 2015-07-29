@@ -370,9 +370,10 @@ class ForeignKey(BaseField):
             source, feature_class, field_name, layer_name, layer_fields)
 
         if self.primary_key is None:
-            self.primary_key = self.origin_class.oid_field_name
+            self.primary_key = self.origin_class.fields.oid_field.name
 
-        self.pk_field_name = self.origin_class.get_field_name(self.primary_key)
+        self.pk_field_name = \
+            self.origin_class.fields.get_name(self.primary_key)
 
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
