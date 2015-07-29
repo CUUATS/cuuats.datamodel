@@ -275,8 +275,8 @@ class QuerySet(object):
             rel = self.feature_class.__dict__.get(rel_name, None)
             if isinstance(rel, RelatedManager):
                 self._prefetch_related_manager(rel_name, rel)
-            elif rel is not None and rel.__name__ == 'ForeignKey':
-                self._prefecth_foreign_key(rel_name, rel)
+            elif rel.__class__.__name__ == 'ForeignKey':
+                self._prefetch_foreign_key(rel_name, rel)
             else:
                 raise AttributeError(
                     'Relationship %s does not exist.' % (rel_name,))
