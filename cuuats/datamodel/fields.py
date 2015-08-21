@@ -27,9 +27,15 @@ class BaseField(object):
         BaseField.creation_index += 1
 
     def __get__(self, instance, owner):
+        # Retrieve deferred values if necessary.
         if isinstance(instance.values.get(self.name, None), DeferredValue):
             instance.get_deferred_values()
-        return instance.values.get(self.name, None)
+        value = instance.values.get(self.name, None)
+        if self.domain_name:
+            domain = instance.source.get_domain(field.domain_name)
+            if domain.domainType == 'CodedValue':
+                value._description = domain.codedValues.get(value, None)
+        return value
 
     def __set__(self, instance, value):
         instance.values[self.name] = value
