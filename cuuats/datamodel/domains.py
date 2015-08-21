@@ -12,10 +12,8 @@ class Description(object):
         self.description = description
 
     def __eq__(self, other):
-        if isinstance(other, basestring):
-            return self.description == other
-        else:
-            return self.description == getattr(other, '_description', None)
-
+        if isinstance(other, Description):
+            return self.description == other.description
+        return self.description == getattr(other, '_description', None)
 
 D = Description

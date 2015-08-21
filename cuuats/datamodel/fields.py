@@ -1,4 +1,5 @@
 import warnings
+from cuuats.datamodel.domains import D
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.scales import BaseScale
 from cuuats.datamodel.query import RelatedManager
@@ -30,14 +31,27 @@ class BaseField(object):
         # Retrieve deferred values if necessary.
         if isinstance(instance.values.get(self.name, None), DeferredValue):
             instance.get_deferred_values()
+
+        # Get the current value from the instance.
         value = instance.values.get(self.name, None)
+
+        # If this field has a coded values domain, set the description
+        # for this value.
         if self.domain_name:
-            domain = instance.source.get_domain(field.domain_name)
+            domain = instance.source.get_domain(self.domain_name)
             if domain.domainType == 'CodedValue':
                 value._description = domain.codedValues.get(value, None)
+
         return value
 
     def __set__(self, instance, value):
+        # If the value representes a description for a coded values domain,
+        # look up the value from the domain.
+        if isinstance(value, D):
+            description = value.description
+            domain = instance.source.get_domain(self.domain_name, 'CodedValue')
+            value = instance.source.get_coded_value(domain.name, description)
+
         instance.values[self.name] = value
 
     def __repr__(self):
