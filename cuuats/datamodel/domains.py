@@ -21,6 +21,9 @@ class Description(object):
             return self.description == other.description
         return False
 
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 D = Description
 
 

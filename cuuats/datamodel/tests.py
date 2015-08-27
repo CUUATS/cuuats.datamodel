@@ -553,6 +553,10 @@ class TestDescription(unittest.TestCase):
         self.assertNotEqual(D('Test 1'), CodedValue(3, 'Test 2'))
         self.assertNotEqual(CodedValue(3, 'Test 2'), D('Test 1'))
 
+    def test_coded_value_inequality(self):
+        self.assertFalse(D('Test') != CodedValue(3, 'Test'))
+        self.assertFalse(CodedValue(3, 'Test') != D('Test'))
+
     def test_other_equality(self):
         self.assertNotEqual(D('Test'), 'Test')
 
