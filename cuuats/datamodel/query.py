@@ -146,7 +146,9 @@ class SQLCompiler(object):
             return 'NULL'
 
         elif isinstance(value, D):
-            return self._resolve_coded_value(field_name, value)
+            return self._to_string(
+                field_name,
+                self._resolve_coded_value(field_name, value), operator)
 
         elif isinstance(value, basestring):
             if operator == 'LIKE':
@@ -155,14 +157,15 @@ class SQLCompiler(object):
 
         elif isinstance(value, (list, tuple)):
             return '(%s)' % (', '.join(
-                [self._to_string(v, operator) for v in value]), )
+                [self._to_string(field_name, v, operator) for v in value]), )
 
         # TODO: Deal with dates and other common types.
         return str(value)
 
     def _resolve_coded_value(self, field_name, d):
+        field = self.feature_class.fields.get(field_name)
         return self.feature_class.source.get_coded_value(
-            self.domain_name, d.description)
+            field.domain_name, d.description)
 
     def _resolve_field_name(self, field_name):
         return self.feature_class.fields.get_db_name(field_name)
