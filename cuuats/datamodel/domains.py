@@ -14,6 +14,60 @@ class Description(object):
     def __eq__(self, other):
         if isinstance(other, Description):
             return self.description == other.description
-        return self.description == getattr(other, '_description', None)
+        elif isinstance(other, CodedValue):
+            return self.description == other.description
+        return False
 
 D = Description
+
+
+class CodedValue(object):
+    """
+    A coded value with a description.
+    """
+
+    def __new__(cls, value, description):
+        if isinstance(value, int):
+            obj = int.__new__(IntCodedValue, value)
+        elif isinstance(value, long):
+            obj = long.__new__(LongCodedValue, value)
+        elif isinstance(value, float):
+            obj = float.__new__(FloatCodedValue, value)
+        elif isinstance(value, str):
+            obj = str.__new__(StringCodedValue, value)
+        else:
+            raise TypeError('Value must be of type int, long, float or str')
+        obj.description = description
+        return obj
+
+    @property
+    def value(self):
+        """
+        Returns the value as a primative.
+        """
+
+        return type.mro(self.__class__)[2](self)
+
+
+class IntCodedValue(CodedValue, int):
+    """
+    An integer coded value.
+    """
+
+
+class LongCodedValue(CodedValue, long):
+    """
+    A long integer coded value.
+    """
+
+
+class FloatCodedValue(CodedValue, float):
+    """
+    A floating point coded value.
+    """
+
+
+class StringCodedValue(CodedValue, str):
+    """
+    A string coded value.
+    """

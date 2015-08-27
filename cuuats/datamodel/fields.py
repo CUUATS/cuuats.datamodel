@@ -1,5 +1,5 @@
 import warnings
-from cuuats.datamodel.domains import D
+from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.scales import BaseScale
 from cuuats.datamodel.query import RelatedManager
@@ -37,20 +37,25 @@ class BaseField(object):
 
         # If this field has a coded values domain, set the description
         # for this value.
-        if self.domain_name:
+        if value is not None and self.domain_name:
             domain = instance.source.get_domain(self.domain_name)
             if domain.domainType == 'CodedValue':
-                value._description = domain.codedValues.get(value, None)
+                description = domain.codedValues.get(value, None)
+                return CodedValue(value, description)
 
         return value
 
     def __set__(self, instance, value):
+        # If this is a coded value, convert it back to a primative before
+        # storing it.
+        if isinstance(value, CodedValue):
+            value = value.value
+
         # If the value representes a description for a coded values domain,
         # look up the value from the domain.
-        if isinstance(value, D):
-            description = value.description
-            domain = instance.source.get_domain(self.domain_name, 'CodedValue')
-            value = instance.source.get_coded_value(domain.name, description)
+        elif isinstance(value, D):
+            value = instance.source.get_coded_value(
+                self.domain_name, value.description)
 
         instance.values[self.name] = value
 

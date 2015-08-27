@@ -2,6 +2,7 @@ from collections import defaultdict
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
 from cuuats.datamodel.field_values import DeferredValue
+from cuuats.datamodel.domains import D
 
 
 class SQLCondition(object):
@@ -118,7 +119,8 @@ class SQLCompiler(object):
             if isinstance(child, Q):
                 sql_parts.append(self.compile(child))
             else:
-                value_str = self._to_string(child.value, child.operator)
+                value_str = self._to_string(
+                    child.field_name, child.value, child.operator)
                 if child.rel_name is None:
                     sql_parts.append(' '.join([
                         self._resolve_field_name(child.field_name),
@@ -139,9 +141,12 @@ class SQLCompiler(object):
             sql = 'NOT %s' % (sql,)
         return sql
 
-    def _to_string(self, value, operator):
+    def _to_string(self, field_name, value, operator):
         if value is None:
             return 'NULL'
+
+        elif isinstance(value, D):
+            return self._resolve_coded_value(field_name, value)
 
         elif isinstance(value, basestring):
             if operator == 'LIKE':
@@ -154,6 +159,10 @@ class SQLCompiler(object):
 
         # TODO: Deal with dates and other common types.
         return str(value)
+
+    def _resolve_coded_value(self, field_name, d):
+        return self.feature_class.source.get_coded_value(
+            self.domain_name, d.description)
 
     def _resolve_field_name(self, field_name):
         return self.feature_class.fields.get_db_name(field_name)
