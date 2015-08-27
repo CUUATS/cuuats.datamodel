@@ -9,6 +9,9 @@ class Description(object):
     """
 
     def __init__(self, description):
+        if not isinstance(description, basestring):
+            raise TypeError('Description must be a string')
+
         self.description = description
 
     def __eq__(self, other):

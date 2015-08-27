@@ -8,4 +8,4 @@ from cuuats.datamodel.scales import BaseScale, BreaksScale, DictScale, \
     StaticScale
 from cuuats.datamodel.helpers import FeatureClassManager
 from cuuats.datamodel.query import Q
-from cuuats.datamodel.domains import D
+from cuuats.datamodel.domains import D, CodedValue
