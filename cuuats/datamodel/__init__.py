@@ -6,6 +6,6 @@ from cuuats.datamodel.fields import BaseField, OIDField, GlobalIDField, \
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BaseScale, BreaksScale, DictScale, \
     StaticScale
-from cuuats.datamodel.helpers import FeatureClassManager
+from cuuats.datamodel.helpers import feature_class_factory
 from cuuats.datamodel.query import Q
 from cuuats.datamodel.domains import D, CodedValue

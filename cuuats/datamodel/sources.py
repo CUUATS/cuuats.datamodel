@@ -1,7 +1,7 @@
 import arcpy
 import os
 import re
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from time import time
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
@@ -60,7 +60,7 @@ class DataSource(object):
         """
 
         layer_path = os.path.join(self.path, layer_name)
-        return dict([(f.name, f) for f in arcpy.ListFields(layer_path)])
+        return OrderedDict([(f.name, f) for f in arcpy.ListFields(layer_path)])
 
     def count_rows(self, layer_name, where_clause=None):
         """
