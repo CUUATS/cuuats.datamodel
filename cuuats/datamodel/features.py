@@ -89,6 +89,7 @@ class BaseFeature(object):
     db_row = None
     objects = Manager()
     fields = FieldManager()
+    related_classes = None
 
     @classmethod
     def register(cls, source, layer_name):
@@ -336,6 +337,27 @@ class BaseFeature(object):
         return bool(self.eval(condition))
 
 
+def relate(origin_class, destination_class, primary_key, foreign_key,
+           fk_field_name=None, fk_label=None, related_name=None):
+    """
+    Establish a relationship between two classes by assigning a ForeignKey
+    to the destination class.
+    """
+
+    fk_field_name = fk_field_name or foreign_key
+    fk_label = fk_label or fk_field_name
+    pk_field_name = origin_class.fields.get_name(primary_key)
+
+    field = ForeignKey(
+        fk_label,
+        db_name=foreign_key,
+        origin_class=origin_class,
+        primary_key=pk_field_name,
+        related_name=related_name)
+
+    setattr(destination_class, fk_field_name, field)
+
+
 class BaseAttachment(BaseFeature):
     """
     A file attached to an ArcGIS feature class.
@@ -401,11 +423,7 @@ def attachment_class_factory(
         A file attachment.
         """
 
-        feature = ForeignKey(
-            'Feature',
-            db_name=foreign_key,
-            origin_class=origin_class,
-            primary_key=primary_key,
-            related_name=related_name)
+    relate(origin_class, Attachment, primary_key, foreign_key, 'feature',
+           'Feature', related_name)
 
     return Attachment

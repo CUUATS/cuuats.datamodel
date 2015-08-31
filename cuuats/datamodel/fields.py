@@ -382,7 +382,6 @@ class ForeignKey(BaseField):
         # of the actual class.
         self.origin_class = kwargs.get('origin_class', None)
         self.primary_key = kwargs.get('primary_key', None)
-        self.pk_field_name = None
         self.related_name = kwargs.get('related_name', None)
 
     def register(self, source, feature_class, field_name, layer_name,
@@ -397,15 +396,28 @@ class ForeignKey(BaseField):
         if self.primary_key is None:
             self.primary_key = self.origin_class.fields.oid_field.name
 
-        self.pk_field_name = \
-            self.origin_class.fields.get_name(self.primary_key)
-
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
 
         setattr(self.origin_class, self.related_name,
                 RelatedManager(self.related_name, feature_class,
-                               self.db_name, self.primary_key))
+                               self.name, self.primary_key))
+
+        self._set_related(feature_class)
+
+    def _set_related(self, destination_class):
+        """
+        Set references to related feature classes.
+        """
+
+        for feature_class in (self.origin_class, destination_class):
+            if feature_class.related_classes is None:
+                feature_class.related_classes = {}
+
+        self.origin_class.related_classes[destination_class.__name__] = \
+            destination_class
+        destination_class.related_classes[self.origin_class.__name__] = \
+            self.origin_class
 
     def __get__(self, instance, owner):
         value = super(ForeignKey, self).__get__(instance, owner)

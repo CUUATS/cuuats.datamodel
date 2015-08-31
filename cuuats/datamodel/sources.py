@@ -14,8 +14,8 @@ class DataSource(object):
     """
 
     RelationshipInfo = namedtuple(
-        'RelationshipInfo',
-        ['origin', 'destination', 'primary_key', 'foreign_key'])
+        'RelationshipInfo', ['origin', 'destination', 'primary_key',
+                             'foreign_key', 'is_attachment'])
 
     def __init__(self, path):
         self.path = path
@@ -23,23 +23,32 @@ class DataSource(object):
             dict([(d.name, d) for d in arcpy.da.ListDomains(self.path)])
         self.editor = arcpy.da.Editor(self.path)
 
-    def get_relationship_info(self, rc):
+    def list_relationships(self, layer_name):
+        """
+        List the relationships that this feature class participates in.
+        Relationship information is returned as a RelationshipInfo tuple.
+        """
+
+        layer = arcpy.Describe(os.path.join(self.path, layer_name))
+        return [self.get_relationship_info(rc_name)
+                for rc_name in layer.relationshipClassNames]
+
+    def get_relationship_info(self, rc_name):
         """
         Extract the origin, destination, primary and foreign keys from a
         RelationshipClass Describe result or the name of the relationship
         class.
         """
 
-        if isinstance(rc, basestring):
-            rc = arcpy.Describe(os.path.join(self.path, rc))
-
+        rc = arcpy.Describe(os.path.join(self.path, rc_name))
         origin = rc.originClassNames[0]
         destination = rc.destinationClassNames[0]
         keys = rc.OriginClassKeys
         primary = [k[0] for k in keys if k[1] == 'OriginPrimary'][0]
         foreign = [k[0] for k in keys if k[1] == 'OriginForeign'][0]
+        is_attachment = rc.isAttachmentRelationship
         return self.RelationshipInfo(
-            origin, destination, primary, foreign)
+            origin, destination, primary, foreign, is_attachment)
 
     def get_attachment_info(self, layer_name):
         """
@@ -47,11 +56,9 @@ class DataSource(object):
         attachment relationship.
         """
 
-        layer = arcpy.Describe(os.path.join(self.path, layer_name))
-        for rc_name in layer.relationshipClassNames:
-            rc = arcpy.Describe(os.path.join(self.path, rc_name))
-            if rc.isAttachmentRelationship:
-                return self.get_relationship_info(rc)
+        for rc_info in self.list_relationships(layer_name):
+            if rc_info.is_attachment:
+                return rc_info
         return None
 
     def get_layer_fields(self, layer_name):

@@ -491,12 +491,8 @@ class RelatedManager(Manager):
                 'Related class must be registered with a data source before '
                 'it can be queried')
 
-        fk_field_name = \
-            self.destination_class.fields.get_name(self.foreign_key)
-        pk_field_name = instance.fields.get_name(self.primary_key)
-
         qs = self.queryset_class(self.destination_class).filter({
-            fk_field_name: getattr(instance, pk_field_name)
+            self.foreign_key: getattr(instance, self.primary_key)
         })
 
         # If we have prefetched related features, populate the QuerySet cache.
