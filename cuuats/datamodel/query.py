@@ -184,7 +184,7 @@ class SQLCompiler(object):
     def compile(self, q, inner=False):
         q = q.simplify()
         where_parts = []
-        feature_class, pk, fk = self._resolve_rel(q.rel_name)
+        feature_class, other_key, self_key = self._resolve_rel(q.rel_name)
 
         for child in q.children:
             if isinstance(child, Q):
@@ -201,9 +201,9 @@ class SQLCompiler(object):
             where = '(%s)' % (where,)
         if q.negated:
             where = 'NOT %s' % (where,)
-        if pk is not None:
+        if self_key is not None:
             where = '%s IN (SELECT %s FROM %s WHERE %s)' % (
-                pk, fk, feature_class.name, where)
+                other_key, self_key, feature_class.name, where)
 
         return where
 
@@ -249,13 +249,15 @@ class SQLCompiler(object):
         relation = self.feature_class.__dict__.get(rel_name)
         if isinstance(relation, RelatedManager):
             return [relation.destination_class,
-                    self.feature_class.fields.oid_field.name,
-                    relation.foreign_key]
+                    self.feature_class.fields.get_db_name(
+                        relation.primary_key),
+                    relation.destination_class.fields.get_db_name(
+                        relation.foreign_key)]
 
         # Field is a ForeignKey.
         return [relation.origin_class,
                 relation.db_name,
-                relation.origin_class.fields.oid_field.name]
+                relation.origin_class.fields.get_db_name(relation.primary_key)]
 
 
 class Query(object):
