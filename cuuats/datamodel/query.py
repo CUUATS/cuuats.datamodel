@@ -1,3 +1,4 @@
+import itertools
 from collections import defaultdict
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
@@ -18,21 +19,21 @@ class SQLCondition(object):
         'lte': '<=',
     }
 
-    def __init__(self, field_info, value):
+    def __init__(self, field_name, value, op_name=None):
+        self.field_name = field_name
         self.value = value
-        self.rel_name = None
-        self.field_name, sep, op_name = field_info.rpartition('__')
-        if op_name not in self.OPERATORS:
-            self.field_name = field_info
+
+        # Extract or intuit the operator.
+        if op_name is None:
             if value is None:
                 op_name = 'exact'
             else:
                 op_name = 'eq'
+        self.operator = self.OPERATORS[op_name]
 
-        self.operator = self.OPERATORS.get(op_name, None)
-
-        if '__' in self.field_name:
-            self.rel_name, sep, self.field_name = field_info.rpartition('__')
+    def __repr__(self):
+        return '<SQLCondition: %s>' % (
+            ' '.join([self.field_name, self.operator, str(self.value)]),)
 
 
 class Q(object):
@@ -40,8 +41,9 @@ class Q(object):
     def __init__(self, filters={}, **kwargs):
         self.operator = 'AND'
         self.negated = False
-        self.children = [
-            SQLCondition(*f) for f in filters.items() + kwargs.items()]
+        self.rel_name = None
+        self.children = []
+        self._parse_children(filters.items() + kwargs.items())
 
     def __and__(self, other):
         return self._combine(other, 'AND')
@@ -59,49 +61,118 @@ class Q(object):
 
     def __repr__(self):
         child_str = ', '.join([str(c) for c in self.children])
-        return '<Q: %s(%s: %s)>' % (
-            self.negated and 'NOT ' or '', self.operator, child_str)
+        result = '%s[%s]: %s' % (self.rel_name or '', self.operator, child_str)
+        if self.negated:
+            result = 'NOT(%s)' % (result,)
+        return '<Q:%s>' % (result,)
 
-    def _clone(self):
-        q = self.__class__()
+    def _parse_children(self, filters):
+        for (field_info, value) in filters:
+            rels, field_name, op_name = self._parse_field_info(field_info)
+            parent = self
+            for rel in rels:
+                child = self._create()
+                child.rel_name = rel
+                parent.children.append(child)
+                parent = child
+            parent.children.append(SQLCondition(field_name, value, op_name))
+
+    def _parse_field_info(self, field_info):
+        op_name = None
+        parts = field_info.split('__')
+        if parts[-1] in SQLCondition.OPERATORS:
+            op_name = parts.pop()
+        field_name = parts.pop()
+        return (parts, field_name, op_name)
+
+    def _create(self, *args, **kwargs):
+        return self.__class__(*args, **kwargs)
+
+    def _clone(self, children=True):
+        q = self._create()
         q.operator = self.operator
         q.negated = self.negated
-        q.children = self.children[:]
+        q.rel_name = self.rel_name
+        if children:
+            q.children = self.children[:]
         return q
 
-    def _rels(self):
-        return set([f.rel_name for f in self.children if
-                    isinstance(f, SQLCondition) and f.rel_name is not None])
+    def _combine(self, other, op):
+        q = self._create()
+        q.children = [self._clone(), other._clone()]
+        q.operator = op
+        return q
 
     def _op_match(self, op):
         return op == self.operator or len(self) == 1
 
     def _can_merge(self, other, op):
-        # Don't merge Q objects that traverse the same relationships.
-        # TODO: This determintation should be tied to which QuerySet.filter()
-        # call the Q objects came from.
-        if self._rels() & other._rels():
-            return False
         return self._op_match(op) and other._op_match(op) and \
-            self.negated == other.negated
+            self.negated == other.negated and self.rel_name == other.rel_name
 
     def _can_append(self, other, op):
-        return self._op_match(op) and not self.negated
+        return self._op_match(op) and not self.negated and \
+            (self.rel_name is None or self.rel_name == other.rel_name)
 
-    def _combine(self, other, op):
-        if self._can_merge(other, op):
-            q = self._clone()
-            q.children.extend(other.children)
-        elif self._can_append(other, op):
-            q = self._clone()
-            q.children.append(other._clone())
-        elif other._can_append(self, op):
-            q = other._clone()
-            q.children.append(self._clone())
-        else:
-            q = self.__class__()
-            q.children = [self._clone(), other._clone()]
+    def _merge(self, other, op):
+        q = self._clone()
+        q.children.extend(other.children)
         q.operator = op
+        return q
+
+    def _append(self, other, op):
+        q = self._clone()
+        child = other._clone()
+        if q.rel_name is not None:
+            child.rel_name = None
+        q.children.append(child)
+        q.operator = op
+        return q
+
+    def _merge_or_append(self, other, op):
+        if self._can_merge(other, op):
+            return self._merge(other, op)
+        elif self._can_append(other, op):
+            return self._append(other, op)
+        elif other._can_append(self, op):
+            return other._append(self, op)
+        return None
+
+    def simplify(self):
+        q = self._clone()
+        q.children = [c.simplify() if isinstance(c, Q) else c
+                      for c in q.children]
+
+        # Merge/append children with/to each other.
+        num_children = 0
+        while num_children < len(q.children):
+            num_children = len(q.children)
+            for (a, b) in itertools.combinations(q.children, 2):
+                if not isinstance(a, Q) or not isinstance(b, Q):
+                    continue
+
+                new_child = a._merge_or_append(b, q.operator)
+                if new_child:
+                    q.children = [new_child] + \
+                        [c for c in q.children if c not in (a, b)]
+                    break
+
+        # Simplify the partent.
+        parent_dirty = True
+        while parent_dirty:
+            parent_dirty = False
+            # Merge children with the parent.
+            for child in q.children[:]:
+                if isinstance(child, Q) and q._can_merge(child, q.operator):
+                    q.children = [c for c in q.children if c is not child]
+                    q = q._merge(child)
+                    parent_dirty = True
+
+            # Remove unnecessary parents.
+            if len(q.children) == 1 and not q.negated and q.rel_name is None:
+                q = q.children[0]
+                parent_dirty = True
+
         return q
 
 
@@ -111,35 +182,36 @@ class SQLCompiler(object):
         self.feature_class = feature_class
 
     def compile(self, q, inner=False):
-        sep = ' %s ' % (q.operator)
-        subquery_map = defaultdict(list)
-        sql_parts = []
+        q = q.simplify()
+        where_parts = []
+        feature_class, pk, fk = self._resolve_rel(q.rel_name)
 
         for child in q.children:
             if isinstance(child, Q):
-                sql_parts.append(self.compile(child))
+                compiler = self.__class__(feature_class)
+                where_parts.append(compiler.compile(child))
             else:
-                value_str = self._to_string(
-                    child.field_name, child.value, child.operator)
-                if child.rel_name is None:
-                    sql_parts.append(' '.join([
-                        self._resolve_field_name(child.field_name),
-                        child.operator, value_str]))
-                else:
-                    subquery_map[child.rel_name].append(
-                        (self._resolve_field_name(child.field_name),
-                         child.operator, value_str))
+                where_parts.append(
+                    self._compile_sql_condition(child, feature_class))
 
-        # Compile subqueries
-        sql_parts.extend([self._subquery(rel, fields, sep)
-                          for (rel, fields) in subquery_map.items()])
+        sep = ' %s ' % (q.operator)
+        where = sep.join(where_parts)
 
-        sql = sep.join(sql_parts)
-        if len(sql_parts) > 1 and (q.negated or inner):
-            sql = '(%s)' % (sql,)
+        if len(where_parts) > 1 and (q.negated or inner):
+            where = '(%s)' % (where,)
         if q.negated:
-            sql = 'NOT %s' % (sql,)
-        return sql
+            where = 'NOT %s' % (where,)
+        if pk is not None:
+            where = '%s IN (SELECT %s FROM %s WHERE %s)' % (
+                pk, fk, feature_class.name, where)
+
+        return where
+
+    def _compile_sql_condition(self, cond, feature_class):
+        return ' '.join([
+            self._resolve_field_name(cond.field_name, feature_class),
+            cond.operator,
+            self._to_string(cond.field_name, cond.value, cond.operator)])
 
     def _to_string(self, field_name, value, operator):
         if value is None:
@@ -167,23 +239,23 @@ class SQLCompiler(object):
         return self.feature_class.source.get_coded_value(
             field.domain_name, d.description)
 
-    def _resolve_field_name(self, field_name):
-        return self.feature_class.fields.get_db_name(field_name)
+    def _resolve_field_name(self, field_name, feature_class):
+        return feature_class.fields.get_db_name(field_name)
 
     def _resolve_rel(self, rel_name):
-        field = self.feature_class.__dict__.get(rel_name)
-        if isinstance(field, RelatedManager):
-            destination = field.destination_class
-            return [self.feature_class.fields.oid_field.name,
-                    field.foreign_key, destination.name]
-        # Field is a ForeignKey.
-        origin = field.origin_class
-        return [field.db_name, origin.fields.oid_field.name, origin.name]
+        if rel_name is None:
+            return [self.feature_class, None, None]
 
-    def _subquery(self, rel_name, fields, sep):
-        where_clause = sep.join([' '.join(f) for f in fields])
-        return '%s IN (SELECT %s FROM %s WHERE %s)' % \
-            tuple(self._resolve_rel(rel_name) + [where_clause])
+        relation = self.feature_class.__dict__.get(rel_name)
+        if isinstance(relation, RelatedManager):
+            return [relation.destination_class,
+                    self.feature_class.fields.oid_field.name,
+                    relation.foreign_key]
+
+        # Field is a ForeignKey.
+        return [relation.origin_class,
+                relation.db_name,
+                relation.origin_class.fields.oid_field.name]
 
 
 class Query(object):
