@@ -260,6 +260,9 @@ class Workspace(object):
         a relationship class.
         """
 
+        # TODO: Move this method to a separate class dedicated to dealing
+        # with spatial relationships.
+
         rc_info = self.get_relationship_info(rc_name)
 
         with self.make_layer(rc_info.origin) as origin_layer, \
