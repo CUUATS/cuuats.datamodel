@@ -6,11 +6,39 @@ from contextlib import contextmanager
 from time import time
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
+from cuuats.datamodel.utils import Singleton
 
 
-class DataSource(object):
+class WorkspaceManager(object):
     """
-    A data source for manipulating data in a file geodatabase or SDE.
+    Workspace manager for manipulating workspaces.
+    """
+
+    __metaclass__ = Singleton
+
+    def __init__(self):
+        self.workspaces = {}
+
+    def get(self, path):
+        """
+        Get a workspace corresponding to the given path.
+        """
+
+        if path not in self.workspaces:
+            self.workspaces[path] = Workspace(path)
+        return self.workspaces[path]
+
+    def clear(self):
+        """
+        Clear all cached workspaces.
+        """
+
+        self.workspaces = {}
+
+
+class Workspace(object):
+    """
+    A workspace representing a file geodatabase or SDE.
     """
 
     RelationshipInfo = namedtuple(

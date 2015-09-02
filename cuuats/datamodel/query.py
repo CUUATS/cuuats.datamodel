@@ -169,7 +169,8 @@ class Q(object):
                     parent_dirty = True
 
             # Remove unnecessary parents.
-            if len(q.children) == 1 and not q.negated and q.rel_name is None:
+            if len(q.children) == 1 and not q.negated and q.rel_name is None \
+                    and isinstance(q.children[0], Q):
                 q = q.children[0]
                 parent_dirty = True
 
@@ -236,7 +237,7 @@ class SQLCompiler(object):
 
     def _resolve_coded_value(self, field_name, d):
         field = self.feature_class.fields.get(field_name)
-        return self.feature_class.source.get_coded_value(
+        return self.feature_class.workspace.get_coded_value(
             field.domain_name, d.description)
 
     def _resolve_field_name(self, field_name, feature_class):
@@ -471,12 +472,12 @@ class QuerySet(object):
         if self._cache is not None:
             return len(self._cache)
 
-        return self.feature_class.source.count_rows(
+        return self.feature_class.workspace.count_rows(
             self.feature_class.name,
             self.query.where)
 
     def iterator(self, limit=None):
-        for (row, cursor) in self.feature_class.source.iter_rows(
+        for (row, cursor) in self.feature_class.workspace.iter_rows(
                 self.feature_class.name, self.query.fields, False,
                 self.query.where, limit, self.query.prefix,
                 self.query.postfix):
@@ -504,7 +505,7 @@ class QuerySet(object):
         return clone.first()
 
     def aggregate(self, fields):
-        return self.feature_class.source.summarize(
+        return self.feature_class.workspace.summarize(
             self.feature_class.name,
             fields,
             self.query.where)
@@ -537,9 +538,9 @@ class Manager(object):
             raise AttributeError('Manager is not accessible '
                                  'from feature instances')
 
-        if owner.source is None:
+        if owner.workspace is None:
             raise AttributeError(
-                'Feature class %s must be registered with a data source '
+                'Feature class %s must be registered '
                 'before it can be queried' % (owner.__name__,))
 
         return self.queryset_class(owner)
@@ -560,9 +561,9 @@ class RelatedManager(Manager):
             raise AttributeError('Related Manager is only accessible '
                                  'from feature instances')
 
-        if self.destination_class.source is None:
+        if self.destination_class.workspace is None:
             raise AttributeError(
-                'Related class must be registered with a data source before '
+                'Related class must be registered before '
                 'it can be queried')
 
         qs = self.queryset_class(self.destination_class).filter({

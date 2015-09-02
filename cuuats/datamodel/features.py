@@ -5,19 +5,20 @@ from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
     ForeignKey, NumericField, StringField, BlobField, GeometryField
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
+from cuuats.datamodel.workspaces import WorkspaceManager
 
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
 
-def require_source(fn):
+def require_registration(fn):
     """
-    Decorator to check that the class has been registered with a data source.
+    Decorator to check that the class has been registered with a workspace.
     """
 
     def wrapper(*args, **kwargs):
-        if getattr(args[0], 'source', None) is None:
+        if getattr(args[0], 'workspace', None) is None:
             raise AttributeError(
-                'Feature class %s must be registered with a data source' %
+                'Feature class %s must be registered' %
                 (args[0].__name__,))
         return fn(*args, **kwargs)
 
@@ -84,7 +85,7 @@ class BaseFeature(object):
     """
 
     name = None
-    source = None
+    workspace = None
     attachments = None
     db_row = None
     objects = Manager()
@@ -92,39 +93,41 @@ class BaseFeature(object):
     related_classes = None
 
     @classmethod
-    def register(cls, source, layer_name):
+    def register(cls, path):
         """
-        Connect this feature class to a layer in the data source.
+        Connect this feature class to a feature class in a workspace.
         """
 
-        cls.source = source
-        cls.name = layer_name
+        workspace_path, cls.name = os.path.split(path)
+        cls.workspace = WorkspaceManager().get(workspace_path)
 
         if not issubclass(cls, BaseAttachment):
-            attachment_info = source.get_attachment_info(layer_name)
+            attachment_info = cls.workspace.get_attachment_info(cls.name)
             if attachment_info is not None:
                 Attachment = attachment_class_factory(
                     cls, attachment_info.primary_key,
                     attachment_info.foreign_key)
-                Attachment.register(cls.source, attachment_info.destination)
+                Attachment.register(
+                    os.path.join(workspace_path, attachment_info.destination))
                 cls.attachment_class = Attachment
 
-        # Register fields with the source
-        layer_fields = source.get_layer_fields(layer_name)
+        # Register fields with the workspace
+        layer_fields = cls.workspace.get_layer_fields(cls.name)
         for (field_name, field) in cls.fields.items():
-            field.register(source, cls, field_name, cls.name, layer_fields)
+            field.register(
+                cls.workspace, cls, field_name, cls.name, layer_fields)
 
     @classmethod
-    @require_source
+    @require_registration
     def count(cls, where_clause=None):
         """
         Count the number of features matching the given where clause.
         """
 
-        return cls.source.count_rows(cls.name, where_clause)
+        return cls.workspace.count_rows(cls.name, where_clause)
 
     @classmethod
-    @require_source
+    @require_registration
     def update_batch_fields(cls, field_names=None):
         """
         Update the given (or all) batch fields for this feature class.
@@ -138,7 +141,7 @@ class BaseFeature(object):
             field.update(cls)
 
     @classmethod
-    @require_source
+    @require_registration
     def sync_fields(cls, modify=False, remove=False):
         """
         Adds (and optionally, modify or removes) database fields to match
@@ -149,7 +152,7 @@ class BaseFeature(object):
             raise NotImplementedError('Modification and removal of fields '
                                       'are not yet supported')
 
-        layer_fields = cls.source.get_layer_fields(cls.name)
+        layer_fields = cls.workspace.get_layer_fields(cls.name)
         added_fields = []
 
         for (field_name, field) in cls.fields.items():
@@ -157,15 +160,16 @@ class BaseFeature(object):
                 storage = field.storage
                 if 'field_alias' not in storage:
                     storage['field_alias'] = field.label
-                cls.source.add_field(cls.name, field_name, storage)
+                cls.workspace.add_field(cls.name, field_name, storage)
                 added_fields.append(field_name)
 
         # Reregister fields
-        layer_fields = cls.source.get_layer_fields(cls.name)
+        layer_fields = cls.workspace.get_layer_fields(cls.name)
         for (field_name, field) in cls.fields.items():
-            field.register(cls.source, cls, field_name, cls.name, layer_fields)
+            field.register(
+                cls.workspace, cls, field_name, cls.name, layer_fields)
 
-    @require_source
+    @require_registration
     def __init__(self, **kwargs):
         for field_name in kwargs.keys():
             if field_name not in self.fields.keys():
@@ -207,7 +211,7 @@ class BaseFeature(object):
                            self.values.values()
                            if isinstance(v, DeferredValue)])
 
-        values = self.source.get_row(
+        values = self.workspace.get_row(
             self.name, fields.values(), self.oid_where)
 
         self.values.update(dict(zip(fields.keys(), values)))
@@ -219,8 +223,8 @@ class BaseFeature(object):
         """
 
         field = self.fields.get(field_name)
-        domain = self.source.get_domain(field.domain_name, 'CodedValue')
-        code = self.source.get_coded_value(domain.name, description)
+        domain = self.workspace.get_domain(field.domain_name, 'CodedValue')
+        code = self.workspace.get_coded_value(domain.name, description)
         setattr(self, field_name, code)
 
     def get_coded_value_for(self, field_name, description):
@@ -230,7 +234,7 @@ class BaseFeature(object):
         """
 
         field = self.fields.get(field_name)
-        return self.source.get_coded_value(field.domain_name, description)
+        return self.workspace.get_coded_value(field.domain_name, description)
 
     def get_description_for(self, field_name, value=None):
         """
@@ -242,7 +246,7 @@ class BaseFeature(object):
             value = getattr(self, field_name)
 
         field = self.fields.get(field_name)
-        domain = self.source.get_domain(field.domain_name, 'CodedValue')
+        domain = self.workspace.get_domain(field.domain_name, 'CodedValue')
         return domain.codedValues.get(value, None)
 
     def clean(self):
@@ -288,7 +292,7 @@ class BaseFeature(object):
 
     def save(self):
         """
-        Update the corresponding row in the data source.
+        Update the corresponding row in feature class.
         """
 
         new_row = self.serialize()
@@ -301,9 +305,9 @@ class BaseFeature(object):
                        if not isinstance(self.values.get(f), DeferredValue)]
         where_clause = '%s = %i' % (oid_field, oid)
         updated_count = 0
-        for (row, cursor) in self.source.iter_rows(
+        for (row, cursor) in self.workspace.iter_rows(
                 self.name, field_names, True, where_clause):
-            self.source.update_row(cursor, new_row)
+            self.workspace.update_row(cursor, new_row)
             updated_count += 1
 
         if updated_count == 0:
@@ -415,7 +419,7 @@ def attachment_class_factory(
         base_class=BaseAttachment):
     """
     Each feature class needs a unique attachment class so that it can be
-    registered for the appropriate attachment table in the data source.
+    registered for the appropriate attachment table in the workspace.
     """
 
     class Attachment(base_class):

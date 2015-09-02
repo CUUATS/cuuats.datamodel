@@ -38,7 +38,7 @@ class BaseField(object):
         # If this field has a coded values domain, set the description
         # for this value.
         if value is not None and self.domain_name:
-            domain = instance.source.get_domain(self.domain_name)
+            domain = instance.workspace.get_domain(self.domain_name)
             if domain.domainType == 'CodedValue':
                 description = domain.codedValues.get(value, None)
                 return CodedValue(value, description)
@@ -54,7 +54,7 @@ class BaseField(object):
         # If the value representes a description for a coded values domain,
         # look up the value from the domain.
         elif isinstance(value, D):
-            value = instance.source.get_coded_value(
+            value = instance.workspace.get_coded_value(
                 self.domain_name, value.description)
 
         instance.values[self.name] = value
@@ -62,10 +62,10 @@ class BaseField(object):
     def __repr__(self):
         return '%s: %s' % (self.__class__.__name__, self.label)
 
-    def register(self, source, feature_class, field_name, layer_name,
+    def register(self, workspace, feature_class, field_name, layer_name,
                  layer_fields):
         """
-        Register this field with the data source.
+        Register this field with the workspace.
         """
 
         layer_field = layer_fields.get(self.db_name or field_name, None)
@@ -78,7 +78,7 @@ class BaseField(object):
                 self.db_name = field_name
             if layer_field.domain:
                 self.domain_name = layer_field.domain
-                domain = source.get_domain(layer_field.domain)
+                domain = workspace.get_domain(layer_field.domain)
                 if domain.domainType == 'CodedValue':
                     self.choices.extend(domain.codedValues)
                 elif hasattr(self, 'min') and hasattr(self, 'max'):
@@ -139,10 +139,10 @@ class GeometryField(BaseField):
         self.db_name = kwargs.get('db_name', 'SHAPE@')
         self.deferred = kwargs.get('deferred', True)
 
-    def register(self, source, feature_class, field_name, layer_name,
+    def register(self, workspace, feature_class, field_name, layer_name,
                  layer_fields):
         """
-        Register this field with the data source.
+        Register this field with the workspace.
         """
 
         # TODO: Figure out how to check whether the geometry field exists,
@@ -363,7 +363,7 @@ class RelationshipSummaryField(BatchField):
         Update the field values for this feature class.
         """
 
-        cls.source.update_relationship_statistics(
+        cls.workspace.update_relationship_statistics(
             self.rel,
             {self.name: [self.summary_field, self.statistic]},
             self.where_clause,
@@ -384,14 +384,14 @@ class ForeignKey(BaseField):
         self.primary_key = kwargs.get('primary_key', None)
         self.related_name = kwargs.get('related_name', None)
 
-    def register(self, source, feature_class, field_name, layer_name,
+    def register(self, workspace, feature_class, field_name, layer_name,
                  layer_fields):
         """
-        Register this field with the data source.
+        Register this field with the workspace.
         """
 
         super(ForeignKey, self).register(
-            source, feature_class, field_name, layer_name, layer_fields)
+            workspace, feature_class, field_name, layer_name, layer_fields)
 
         if self.primary_key is None:
             self.primary_key = self.origin_class.fields.oid_field.name

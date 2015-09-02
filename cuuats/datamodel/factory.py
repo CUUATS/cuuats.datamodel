@@ -1,14 +1,19 @@
 import inspect
+import os
 from cuuats.datamodel.features import BaseFeature, relate
 from cuuats.datamodel.fields import BlobField, GeometryField, GlobalIDField, \
     OIDField, StringField, NumericField
+from cuuats.datamodel.workspaces import WorkspaceManager
 
 
-def feature_class_factory(fc_name, source, register=True, exclude=[],
+def feature_class_factory(path, register=True, exclude=[],
                           follow_relationships=True, class_name=None):
     """
-    Create a feature class by introspecting the data source.
+    Create a feature class by introspecting the workspace.
     """
+
+    workspace_path, fc_name = os.path.split(path)
+    workspace = WorkspaceManager().get(workspace_path)
 
     class Feature(BaseFeature):
         pass
@@ -24,7 +29,7 @@ def feature_class_factory(fc_name, source, register=True, exclude=[],
     # TODO: Handle Date and Raster field types.
     # TODO: Handle field names that conflict with Feature attributes
     # and methods.
-    for (db_name, db_field) in source.get_layer_fields(fc_name).items():
+    for (db_name, db_field) in workspace.get_layer_fields(fc_name).items():
         field = {
             'Blob': BlobField,
             'Geometry': GeometryField,
@@ -39,29 +44,30 @@ def feature_class_factory(fc_name, source, register=True, exclude=[],
 
     # Set up relationships.
     if follow_relationships:
-        for rc_info in source.list_relationships(fc_name):
+        for rc_info in workspace.list_relationships(fc_name):
             if rc_info.is_attachment:
                 continue
 
             if rc_info.origin == fc_name:
+                related_path = os.path.join(
+                    workspace_path, rc_info.destination)
                 RelatedFeature = feature_class_factory(
-                    rc_info.destination, source, register=False,
-                    follow_relationships=False)
+                    related_path, register=False, follow_relationships=False)
                 relate(Feature, RelatedFeature, rc_info.primary_key,
                        rc_info.foreign_key)
                 if register:
-                    RelatedFeature.register(source, rc_info.destination)
+                    RelatedFeature.register(related_path)
             else:
+                related_path = os.path.join(workspace_path, rc_info.origin)
                 RelatedFeature = feature_class_factory(
-                    rc_info.origin, source, register=False,
-                    follow_relationships=False)
+                    related_path, register=False, follow_relationships=False)
                 relate(RelatedFeature, Feature, rc_info.primary_key,
                        rc_info.foreign_key)
                 if register:
-                    RelatedFeature.register(source, rc_info.origin)
+                    RelatedFeature.register(related_path)
 
     # Register the new feature class.
     if register:
-        Feature.register(source, fc_name)
+        Feature.register(path)
 
     return Feature

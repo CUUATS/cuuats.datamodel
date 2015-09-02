@@ -5,12 +5,13 @@ import tempfile
 import unittest
 from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
-from cuuats.datamodel.sources import DataSource
+from cuuats.datamodel.workspaces import Workspace
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
     StringField, NumericField, ScaleField, MethodField, WeightsField
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BreaksScale, DictScale
 from cuuats.datamodel.domains import CodedValue, D
+from cuuats.datamodel.workspaces import WorkspaceManager
 
 
 class TestFields(unittest.TestCase):
@@ -103,7 +104,7 @@ class TestFields(unittest.TestCase):
         self.assertEqual(self.inst_a.weights_field, 3.5)
 
 
-class SourceFeatureMixin(object):
+class WorkspaceFeatureMixin(object):
 
     GDB_NAME = 'test.gdb'
     DOMAIN_NAME = 'YesOrNo'
@@ -133,9 +134,9 @@ class SourceFeatureMixin(object):
 
     def setUp(self):
         # Create a new file geodatabase.
-        self.workspace = tempfile.mkdtemp()
-        self.gdb_path = os.path.join(self.workspace, self.GDB_NAME)
-        arcpy.CreateFileGDB_management(self.workspace, self.GDB_NAME)
+        self.workspace_dir = tempfile.mkdtemp()
+        self.gdb_path = os.path.join(self.workspace_dir, self.GDB_NAME)
+        arcpy.CreateFileGDB_management(self.workspace_dir, self.GDB_NAME)
 
         # Add a coded values domain, and populate it with coded values.
         arcpy.CreateDomain_management(
@@ -164,10 +165,10 @@ class SourceFeatureMixin(object):
             for row in self.FEATURE_CLASS_DATA:
                 cursor.insertRow(row)
 
-        # Create a data source from the GDB.
-        self.source = DataSource(self.gdb_path)
+        # Create a workspace from the GDB.
+        self.workspace = Workspace(self.gdb_path)
 
-        # Create a feature matching the data source.
+        # Create a feature matching the workspace.
         class Widget(BaseFeature):
             """
             Test feature class.
@@ -196,37 +197,38 @@ class SourceFeatureMixin(object):
         self.cls = Widget
 
     def tearDown(self):
-        if self.cls.source is not None:
-            del self.cls.source
+        if self.cls.workspace is not None:
+            del self.cls.workspace
         del self.cls
-        del self.source
-        shutil.rmtree(self.workspace)
+        del self.workspace
+        WorkspaceManager().clear()
+        shutil.rmtree(self.workspace_dir)
 
 
-class TestDataSource(SourceFeatureMixin, unittest.TestCase):
+class TestWorkspace(WorkspaceFeatureMixin, unittest.TestCase):
 
     def test_get_attachment_info(self):
-        no_attach = self.source.get_attachment_info(self.FEATURE_CLASS_NAME)
+        no_attach = self.workspace.get_attachment_info(self.FEATURE_CLASS_NAME)
         self.assertEqual(no_attach, None)
 
         arcpy.EnableAttachments_management(self.fc_path)
-        attach = self.source.get_attachment_info(self.FEATURE_CLASS_NAME)
+        attach = self.workspace.get_attachment_info(self.FEATURE_CLASS_NAME)
         self.assertEqual(attach.origin, self.FEATURE_CLASS_NAME)
 
     def test_get_layer_fields(self):
-        layer_fields = self.source.get_layer_fields(self.FEATURE_CLASS_NAME)
+        layer_fields = self.workspace.get_layer_fields(self.FEATURE_CLASS_NAME)
         for field_def in self.FEATURE_CLASS_FIELDS:
             field_name = field_def[0]
             self.assertTrue(field_name in layer_fields,
                             'missing layer field: %s' % (field_name,))
 
     def test_count_rows(self):
-        count = self.source.count_rows(
+        count = self.workspace.count_rows(
             self.FEATURE_CLASS_NAME, 'widget_number = 12345')
         self.assertEqual(count, 1)
 
     def iter_rows(self):
-        rows = list(self.source.iter_rows(
+        rows = list(self.workspace.iter_rows(
             self.FEATURE_CLASS_NAME,
             ['widget_name', 'widget_available'],
             where_clause='widget_number = 12345'))
@@ -239,10 +241,10 @@ class TestDataSource(SourceFeatureMixin, unittest.TestCase):
 
     def test_update_row(self):
         field_names = [f[0] for f in self.FEATURE_CLASS_FIELDS]
-        for (row, cursor) in self.source.iter_rows(
+        for (row, cursor) in self.workspace.iter_rows(
                 self.FEATURE_CLASS_NAME, field_names, update=True):
             row[0] = row[0].replace('Widget', 'Foo')
-            self.source.update_row(cursor, row)
+            self.workspace.update_row(cursor, row)
 
         with arcpy.da.SearchCursor(self.fc_path, ['widget_name']) as cursor:
             for feature in cursor:
@@ -251,50 +253,51 @@ class TestDataSource(SourceFeatureMixin, unittest.TestCase):
                 self.assertTrue('Foo' in widget_name)
 
     def test_domains(self):
-        self.assertEqual(len(self.source.domains), 1,
-                         'incorrect number of domains in source')
-        self.assertTrue(self.DOMAIN_NAME in self.source.domains,
-                        'domain is missing from the source domains')
+        self.assertEqual(len(self.workspace.domains), 1,
+                         'incorrect number of domains in workspace')
+        self.assertTrue(self.DOMAIN_NAME in self.workspace.domains,
+                        'domain is missing from the workspace domains')
 
     def test_get_domain(self):
         with self.assertRaises(NameError):
-            self.source.get_domain('NotADomain')
+            self.workspace.get_domain('NotADomain')
 
         with self.assertRaises(TypeError):
-            self.source.get_domain(self.DOMAIN_NAME, 'Range')
+            self.workspace.get_domain(self.DOMAIN_NAME, 'Range')
 
-        domain = self.source.get_domain(self.DOMAIN_NAME, 'CodedValue')
+        domain = self.workspace.get_domain(self.DOMAIN_NAME, 'CodedValue')
         self.assertTrue(isinstance(domain, arcpy.da.Domain))
 
     def test_get_coded_value(self):
         self.assertEqual(
-            self.source.get_coded_value(self.DOMAIN_NAME, 'No'), 50,
+            self.workspace.get_coded_value(self.DOMAIN_NAME, 'No'), 50,
             'incorrect domain code')
 
         with self.assertRaises(ValueError):
-            self.source.get_coded_value(self.DOMAIN_NAME, 'NotADescription')
+            self.workspace.get_coded_value(self.DOMAIN_NAME, 'NotADescription')
 
     def test_add_field(self):
-        num_fields = len(self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+        num_fields = len(self.workspace.get_layer_fields(
+            self.FEATURE_CLASS_NAME))
 
         with self.assertRaises(KeyError):
-            self.source.add_field(
+            self.workspace.add_field(
                 self.FEATURE_CLASS_NAME,
                 'widget_color',
                 {})
 
-        self.source.add_field(
+        self.workspace.add_field(
             self.FEATURE_CLASS_NAME,
             'widget_color',
             {'field_type': 'TEXT', 'field_length': 100})
 
-        fields = self.source.get_layer_fields(self.FEATURE_CLASS_NAME)
+        fields = self.workspace.get_layer_fields(self.FEATURE_CLASS_NAME)
         self.assertEqual(len(fields), num_fields + 1,
                          'Widget color field not added')
         self.assertTrue('widget_color' in fields.keys())
 
 
-class TestRegisterFeature(SourceFeatureMixin, unittest.TestCase):
+class TestRegisterFeature(WorkspaceFeatureMixin, unittest.TestCase):
 
     def test_register(self):
         with self.assertRaises(AttributeError):
@@ -303,8 +306,8 @@ class TestRegisterFeature(SourceFeatureMixin, unittest.TestCase):
         with self.assertRaises(AttributeError):
             self.cls.iter()
 
-        self.cls.register(self.source, self.FEATURE_CLASS_NAME)
-        self.assertEqual(self.cls.source.path, self.source.path)
+        self.cls.register(self.fc_path)
+        self.assertEqual(self.cls.workspace.path, self.workspace.path)
         for (field_name, field) in self.cls.fields.items():
             self.assertEqual(field.name, field_name,
                              'field name is not set correctly')
@@ -313,11 +316,11 @@ class TestRegisterFeature(SourceFeatureMixin, unittest.TestCase):
             'choices from domain is not assigned correctly')
 
 
-class TestFeature(SourceFeatureMixin, unittest.TestCase):
+class TestFeature(WorkspaceFeatureMixin, unittest.TestCase):
 
     def setUp(self):
         super(TestFeature, self).setUp()
-        self.cls.register(self.source, self.FEATURE_CLASS_NAME)
+        self.cls.register(self.fc_path)
         self.instance = self.cls(
             OBJECTID=1, widget_name='My Widget', widget_number=300,
             widget_available=50, Shape=None)
@@ -383,16 +386,19 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
 
     def test_sync_fields(self):
         self.assertTrue('widget_number_score' in
-                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+                        self.workspace.get_layer_fields(
+                            self.FEATURE_CLASS_NAME))
 
         arcpy.DeleteField_management(self.fc_path, 'widget_number_score')
 
         self.assertTrue('widget_number_score' not in
-                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME))
+                        self.workspace.get_layer_fields(
+                            self.FEATURE_CLASS_NAME))
 
         self.cls.sync_fields()
         self.assertTrue('widget_number_score' in
-                        self.source.get_layer_fields(self.FEATURE_CLASS_NAME),
+                        self.workspace.get_layer_fields(
+                            self.FEATURE_CLASS_NAME),
                         'Syncing fields did not create widget_number_score')
 
     def test_required_if(self):
@@ -414,11 +420,11 @@ class TestFeature(SourceFeatureMixin, unittest.TestCase):
                         'required_if validation message incorrectly generated')
 
 
-class TestQuerySet(SourceFeatureMixin, unittest.TestCase):
+class TestQuerySet(WorkspaceFeatureMixin, unittest.TestCase):
 
         def setUp(self):
             super(TestQuerySet, self).setUp()
-            self.cls.register(self.source, self.FEATURE_CLASS_NAME)
+            self.cls.register(self.fc_path)
 
         def test_all(self):
             widget_names = [row[0] for row in self.FEATURE_CLASS_DATA]
@@ -453,7 +459,7 @@ class TestQuerySet(SourceFeatureMixin, unittest.TestCase):
             del inst_a
             del inst_b
 
-            widget_numbers = [r[0] for (r, c) in self.source.iter_rows(
+            widget_numbers = [r[0] for (r, c) in self.workspace.iter_rows(
                 self.FEATURE_CLASS_NAME, ['widget_number'])]
             self.assertTrue(10 in widget_numbers)
             self.assertTrue(20 in widget_numbers)

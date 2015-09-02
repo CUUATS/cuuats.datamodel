@@ -1,4 +1,4 @@
-from cuuats.datamodel.sources import DataSource
+from cuuats.datamodel.workspaces import WorkspaceManager, Workspace
 from cuuats.datamodel.fields import BaseField, OIDField, GlobalIDField, \
     GeometryField, StringField, NumericField, CalculatedField, ScaleField, \
     WeightsField, MethodField, BatchField, RelationshipSummaryField, \
