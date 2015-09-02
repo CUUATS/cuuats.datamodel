@@ -1,7 +1,7 @@
 import os
 import re
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, OIDField, BatchField, \
+from cuuats.datamodel.fields import BaseField, OIDField, \
     ForeignKey, NumericField, StringField, BlobField, GeometryField
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
@@ -125,20 +125,6 @@ class BaseFeature(object):
         """
 
         return cls.workspace.count_rows(cls.name, where_clause)
-
-    @classmethod
-    @require_registration
-    def update_batch_fields(cls, field_names=None):
-        """
-        Update the given (or all) batch fields for this feature class.
-        """
-
-        fields = [f for (n, f) in cls.fields.items()
-                  if (isinstance(f, BatchField)
-                  and (field_names is None or n in field_names))]
-
-        for field in fields:
-            field.update(cls)
 
     @classmethod
     @require_registration

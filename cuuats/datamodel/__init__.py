@@ -1,8 +1,7 @@
 from cuuats.datamodel.workspaces import WorkspaceManager, Workspace
 from cuuats.datamodel.fields import BaseField, OIDField, GlobalIDField, \
     GeometryField, StringField, NumericField, CalculatedField, ScaleField, \
-    WeightsField, MethodField, BatchField, RelationshipSummaryField, \
-    ForeignKey
+    WeightsField, MethodField, ForeignKey
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BaseScale, BreaksScale, DictScale, \
     StaticScale
