@@ -370,40 +370,35 @@ class QuerySet(object):
 
     def _prefetch_related_manager(self, rel_name, rel):
         # rel is a RelatedManager.
-        origin = self.feature_class
         destination = rel.destination_class
-        pk_field_name = origin.fields.get_name(rel.primary_key)
-        fk_field_name = destination.fields.get_name(rel.foreign_key)
 
-        pk_filter = '%s__in' % (fk_field_name,)
-        pks = [getattr(f, pk_field_name) for f in self._cache]
+        pk_filter = '%s__in' % (rel.foreign_key,)
+        pks = [getattr(f, rel.primary_key) for f in self._cache]
         dest_features = destination.objects.filter({pk_filter: pks})
 
         dest_map = defaultdict(list)
         for feature in dest_features:
-            dest_map[feature.values.get(fk_field_name)].append(feature)
+            dest_map[feature.values.get(rel.foreign_key)].append(feature)
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = dest_map[
-                getattr(feature, pk_field_name)]
+                getattr(feature, rel.primary_key)]
 
     def _prefetch_foreign_key(self, rel_name, rel):
         # rel is a ForeignKey.
         origin = rel.origin_class
-        pk_field_name = rel.pk_field_name
-        fk_field_name = rel_name
 
-        fk_filter = '%s__in' % (pk_field_name,)
-        fks = [f.values.get(fk_field_name, None) for f in self._cache]
+        fk_filter = '%s__in' % (rel.primary_key,)
+        fks = [f.values.get(rel_name, None) for f in self._cache]
         fks = [fk for fk in fks if fk is not None]
         origin_features = origin.objects.filter({fk_filter: fks})
 
         origin_map = dict(
-            [(getattr(f, pk_field_name), f) for f in origin_features])
+            [(getattr(f, rel.primary_key), f) for f in origin_features])
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = origin_map.get(
-                feature.values.get(fk_field_name), None)
+                feature.values.get(rel_name), None)
 
     def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())
