@@ -14,6 +14,129 @@ from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.workspaces import WorkspaceManager
 
 
+def setUpModule():
+    WorkspaceFixture.setUpModule()
+
+
+def tearDownModule():
+    WorkspaceFixture.tearDownModule()
+
+
+class WorkspaceFixture(object):
+
+    GDB_NAME = 'test.gdb'
+    GDB_BACKUP_NAME = 'test_backup.gdb'
+    DOMAIN_NAME = 'YesOrNo'
+    DOMAIN_DESCRIPTION = 'Domain for yes or no responses'
+    DOMAIN_FIELD_TYPE = 'SHORT'
+    DOMAIN_TYPE = 'CODED'
+    DOMAIN_VALUES = {
+        50: 'No',
+        100: 'Yes',
+        101: 'N/A',
+    }
+    FEATURE_CLASS_NAME = 'Widget'
+    FEATURE_CLASS_TYPE = 'POINT'
+    FEATURE_CLASS_FIELDS = (
+        ('widget_name', 'TEXT', 100, None),
+        ('widget_description', 'TEXT', None, None),
+        ('widget_number', 'LONG', None, None),
+        ('widget_available', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
+        ('widget_price', 'FLOAT', None, None),
+        ('widget_number_score', 'DOUBLE', None, None),
+    )
+    FEATURE_CLASS_DATA = (
+        ('Widget A+ Awesome', None, 12345, 100, 10.50, None, (2.5, 3.0)),
+        ('B-Widgety Widget', None, None, 50, None, None, (-2.0, 5.5)),
+        ('My Widget C', 'Best widget', None, None, None, None, (0.0, 4.0)),
+    )
+
+    @classmethod
+    def setUpModule(cls):
+        # Create a new file geodatabase.
+        cls.workspace_dir = tempfile.mkdtemp()
+        cls.gdb_backup_path = os.path.join(
+            cls.workspace_dir, cls.GDB_BACKUP_NAME)
+        arcpy.CreateFileGDB_management(cls.workspace_dir, cls.GDB_BACKUP_NAME)
+
+        # Add a coded values domain, and populate it with coded values.
+        arcpy.CreateDomain_management(
+            cls.gdb_backup_path, cls.DOMAIN_NAME, cls.DOMAIN_DESCRIPTION,
+            cls.DOMAIN_FIELD_TYPE, cls.DOMAIN_TYPE)
+
+        for (code, desc) in cls.DOMAIN_VALUES.items():
+            arcpy.AddCodedValueToDomain_management(
+                cls.gdb_backup_path, cls.DOMAIN_NAME, code, desc)
+
+        # Create a feature class.
+        fc_path = os.path.join(cls.gdb_backup_path, cls.FEATURE_CLASS_NAME)
+        arcpy.CreateFeatureclass_management(
+            cls.gdb_backup_path, cls.FEATURE_CLASS_NAME,
+            cls.FEATURE_CLASS_TYPE)
+
+        # Add some fields to the feature class.
+        for (field_name, field_type, field_precision, field_domain) in \
+                cls.FEATURE_CLASS_FIELDS:
+            arcpy.AddField_management(
+                fc_path, field_name, field_type, field_precision,
+                field_domain=field_domain)
+
+        # Populate the feature class with data.
+        field_names = [f[0] for f in cls.FEATURE_CLASS_FIELDS] + ['SHAPE@XY']
+        with arcpy.da.InsertCursor(fc_path, field_names) as cursor:
+            for row in cls.FEATURE_CLASS_DATA:
+                cursor.insertRow(row)
+
+    @classmethod
+    def tearDownModule(cls):
+        shutil.rmtree(cls.workspace_dir)
+
+    def setUp(self):
+        # Restore the geodatabase from backup.
+        self.gdb_path = os.path.join(self.workspace_dir, self.GDB_NAME)
+        shutil.copytree(self.gdb_backup_path, self.gdb_path)
+
+        # Create a workspace from the GDB.
+        self.fc_path = os.path.join(self.gdb_path, self.FEATURE_CLASS_NAME)
+        self.workspace = Workspace(self.gdb_path)
+
+        # Create a feature matching the workspace.
+        class Widget(BaseFeature):
+            """
+            Test feature class.
+            """
+
+            OBJECTID = OIDField('OID')
+            widget_name = StringField('Widget Name', required=True)
+            widget_description = StringField('Widget Description')
+            widget_number = NumericField('Widget Number', required=True)
+            widget_available = NumericField('Is Widget Available?',
+                                            required=True)
+            widget_price = NumericField('Widget Price',
+                                        required_if='self.is_available')
+            widget_number_score = ScaleField(
+                'Widget Number Score',
+                scale=BreaksScale([100, 500, 1000], [1, 2, 3, 4]),
+                value_field='widget_number',
+                storage={'field_type': 'DOUBLE'}
+            )
+            Shape = GeometryField('Shape')
+
+            @property
+            def is_available(self):
+                return self.get_description_for('widget_available') == 'Yes'
+
+        self.cls = Widget
+
+    def tearDown(self):
+        if self.cls.workspace is not None:
+            del self.cls.workspace
+        del self.cls
+        del self.workspace
+        WorkspaceManager().clear()
+        shutil.rmtree(self.gdb_path)
+
+
 class TestFields(unittest.TestCase):
 
     def setUp(self):
@@ -104,108 +227,7 @@ class TestFields(unittest.TestCase):
         self.assertEqual(self.inst_a.weights_field, 3.5)
 
 
-class WorkspaceFeatureMixin(object):
-
-    GDB_NAME = 'test.gdb'
-    DOMAIN_NAME = 'YesOrNo'
-    DOMAIN_DESCRIPTION = 'Domain for yes or no responses'
-    DOMAIN_FIELD_TYPE = 'SHORT'
-    DOMAIN_TYPE = 'CODED'
-    DOMAIN_VALUES = {
-        50: 'No',
-        100: 'Yes',
-        101: 'N/A',
-    }
-    FEATURE_CLASS_NAME = 'Widget'
-    FEATURE_CLASS_TYPE = 'POINT'
-    FEATURE_CLASS_FIELDS = (
-        ('widget_name', 'TEXT', 100, None),
-        ('widget_description', 'TEXT', None, None),
-        ('widget_number', 'LONG', None, None),
-        ('widget_available', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
-        ('widget_price', 'FLOAT', None, None),
-        ('widget_number_score', 'DOUBLE', None, None),
-    )
-    FEATURE_CLASS_DATA = (
-        ('Widget A+ Awesome', None, 12345, 100, 10.50, None, (2.5, 3.0)),
-        ('B-Widgety Widget', None, None, 50, None, None, (-2.0, 5.5)),
-        ('My Widget C', 'Best widget', None, None, None, None, (0.0, 4.0)),
-    )
-
-    def setUp(self):
-        # Create a new file geodatabase.
-        self.workspace_dir = tempfile.mkdtemp()
-        self.gdb_path = os.path.join(self.workspace_dir, self.GDB_NAME)
-        arcpy.CreateFileGDB_management(self.workspace_dir, self.GDB_NAME)
-
-        # Add a coded values domain, and populate it with coded values.
-        arcpy.CreateDomain_management(
-            self.gdb_path, self.DOMAIN_NAME, self.DOMAIN_DESCRIPTION,
-            self.DOMAIN_FIELD_TYPE, self.DOMAIN_TYPE)
-
-        for (code, desc) in self.DOMAIN_VALUES.items():
-            arcpy.AddCodedValueToDomain_management(
-                self.gdb_path, self.DOMAIN_NAME, code, desc)
-
-        # Create a feature class.
-        self.fc_path = os.path.join(self.gdb_path, self.FEATURE_CLASS_NAME)
-        arcpy.CreateFeatureclass_management(
-            self.gdb_path, self.FEATURE_CLASS_NAME, self.FEATURE_CLASS_TYPE)
-
-        # Add some fields to the feature class.
-        for (field_name, field_type, field_precision, field_domain) in \
-                self.FEATURE_CLASS_FIELDS:
-            arcpy.AddField_management(
-                self.fc_path, field_name, field_type, field_precision,
-                field_domain=field_domain)
-
-        # Populate the feature class with data.
-        field_names = [f[0] for f in self.FEATURE_CLASS_FIELDS] + ['SHAPE@XY']
-        with arcpy.da.InsertCursor(self.fc_path, field_names) as cursor:
-            for row in self.FEATURE_CLASS_DATA:
-                cursor.insertRow(row)
-
-        # Create a workspace from the GDB.
-        self.workspace = Workspace(self.gdb_path)
-
-        # Create a feature matching the workspace.
-        class Widget(BaseFeature):
-            """
-            Test feature class.
-            """
-
-            OBJECTID = OIDField('OID')
-            widget_name = StringField('Widget Name', required=True)
-            widget_description = StringField('Widget Description')
-            widget_number = NumericField('Widget Number', required=True)
-            widget_available = NumericField('Is Widget Available?',
-                                            required=True)
-            widget_price = NumericField('Widget Price',
-                                        required_if='self.is_available')
-            widget_number_score = ScaleField(
-                'Widget Number Score',
-                scale=BreaksScale([100, 500, 1000], [1, 2, 3, 4]),
-                value_field='widget_number',
-                storage={'field_type': 'DOUBLE'}
-            )
-            Shape = GeometryField('Shape')
-
-            @property
-            def is_available(self):
-                return self.get_description_for('widget_available') == 'Yes'
-
-        self.cls = Widget
-
-    def tearDown(self):
-        if self.cls.workspace is not None:
-            del self.cls.workspace
-        del self.cls
-        del self.workspace
-        WorkspaceManager().clear()
-        shutil.rmtree(self.workspace_dir)
-
-
-class TestWorkspace(WorkspaceFeatureMixin, unittest.TestCase):
+class TestWorkspace(WorkspaceFixture, unittest.TestCase):
 
     def test_get_attachment_info(self):
         no_attach = self.workspace.get_attachment_info(self.FEATURE_CLASS_NAME)
@@ -297,7 +319,7 @@ class TestWorkspace(WorkspaceFeatureMixin, unittest.TestCase):
         self.assertTrue('widget_color' in fields.keys())
 
 
-class TestRegisterFeature(WorkspaceFeatureMixin, unittest.TestCase):
+class TestRegisterFeature(WorkspaceFixture, unittest.TestCase):
 
     def test_register(self):
         with self.assertRaises(AttributeError):
@@ -316,7 +338,7 @@ class TestRegisterFeature(WorkspaceFeatureMixin, unittest.TestCase):
             'choices from domain is not assigned correctly')
 
 
-class TestFeature(WorkspaceFeatureMixin, unittest.TestCase):
+class TestFeature(WorkspaceFixture, unittest.TestCase):
 
     def setUp(self):
         super(TestFeature, self).setUp()
@@ -420,7 +442,7 @@ class TestFeature(WorkspaceFeatureMixin, unittest.TestCase):
                         'required_if validation message incorrectly generated')
 
 
-class TestQuerySet(WorkspaceFeatureMixin, unittest.TestCase):
+class TestQuerySet(WorkspaceFixture, unittest.TestCase):
 
         def setUp(self):
             super(TestQuerySet, self).setUp()
