@@ -165,7 +165,7 @@ class Q(object):
             for child in q.children[:]:
                 if isinstance(child, Q) and q._can_merge(child, q.operator):
                     q.children = [c for c in q.children if c is not child]
-                    q = q._merge(child)
+                    q = q._merge(child, q.operator)
                     parent_dirty = True
 
             # Remove unnecessary parents.
