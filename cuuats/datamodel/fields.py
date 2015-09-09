@@ -389,7 +389,7 @@ class ForeignKey(BaseField):
 
         # Otherwise, get the related feature from the database.
         return self.origin_class.objects.get({
-            self.pk_field_name: value
+            self.primary_key: value
         })
 
     def __set__(self, instance, value):
@@ -399,6 +399,6 @@ class ForeignKey(BaseField):
 
         # Allow setting using the primary key or the feature itself.
         if isinstance(value, self.origin_class):
-            super(ForeignKey, self).__set__(getattr(value, self.pk_field_name))
+            super(ForeignKey, self).__set__(getattr(value, self.primary_key))
         else:
             super(ForeignKey, self).__set__(value)
