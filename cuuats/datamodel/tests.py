@@ -124,7 +124,7 @@ class WorkspaceFixture(object):
 
             @property
             def is_available(self):
-                return self.get_description_for('widget_available') == 'Yes'
+                return self.widget_available == D('Yes')
 
         self.cls = Widget
 
@@ -392,12 +392,12 @@ class TestFeature(WorkspaceFixture, unittest.TestCase):
             isinstance(self.instance.fields.get('widget_name'), StringField))
 
     def test_set_by_description(self):
-        self.instance.set_by_description('widget_available', 'Yes')
+        self.instance.widget_available = D('Yes')
         self.assertEqual(self.instance.widget_available, 100)
 
     def test_get_description_for(self):
         self.assertEqual(
-            self.instance.get_description_for('widget_available'), 'No')
+            self.instance.widget_available, D('No'))
 
     def test_field_value_changed(self):
         self.assertEqual(self.instance.widget_number_score, 2)
@@ -433,7 +433,7 @@ class TestFeature(WorkspaceFixture, unittest.TestCase):
         self.assertTrue(price_msg not in self.instance.validate(),
                         'required_if validation message incorrectly generated')
 
-        self.instance.set_by_description('widget_available', 'Yes')
+        self.instance.widget_available = D('Yes')
         self.assertTrue(price_msg in self.instance.validate(),
                         'required_if validation message not generated')
 

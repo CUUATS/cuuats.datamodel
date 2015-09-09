@@ -202,39 +202,6 @@ class BaseFeature(object):
 
         self.values.update(dict(zip(fields.keys(), values)))
 
-    def set_by_description(self, field_name, description):
-        """
-        Set the given field to the coded value that matches the given
-        description.
-        """
-
-        field = self.fields.get(field_name)
-        domain = self.workspace.get_domain(field.domain_name, 'CodedValue')
-        code = self.workspace.get_coded_value(domain.name, description)
-        setattr(self, field_name, code)
-
-    def get_coded_value_for(self, field_name, description):
-        """
-        Look up the coded value for the given description in the given field's
-        domain.
-        """
-
-        field = self.fields.get(field_name)
-        return self.workspace.get_coded_value(field.domain_name, description)
-
-    def get_description_for(self, field_name, value=None):
-        """
-        Look up the domain description for the current (or given) value of
-        the given field.
-        """
-
-        if value is None:
-            value = getattr(self, field_name)
-
-        field = self.fields.get(field_name)
-        domain = self.workspace.get_domain(field.domain_name, 'CodedValue')
-        return domain.codedValues.get(value, None)
-
     def clean(self):
         """
         Perform cleaning of the raw data.

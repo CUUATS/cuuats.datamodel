@@ -317,10 +317,9 @@ class ScaleField(CalculatedField):
         Calculate the value for this field based on the state of the instance.
         """
 
-        if self.use_description:
-            value = instance.get_description_for(self.value_field)
-        else:
-            value = instance.eval(self.value_field)
+        value = instance.eval(self.value_field)
+        if self.use_description and isinstance(value, CodedValue):
+            value = value.description
 
         scale = self._get_scale_for(instance)
         if not scale:
