@@ -254,8 +254,8 @@ class BaseFeature(object):
 
         oid_field = self.fields.oid_field.name
         oid = getattr(self, oid_field)
-        field_names = [f for f in self.fields.keys()
-                       if not isinstance(self.values.get(f), DeferredValue)]
+        field_names = [f.db_name for (n, f) in self.fields.items()
+                       if not isinstance(self.values.get(n), DeferredValue)]
         where_clause = '%s = %i' % (oid_field, oid)
         updated_count = 0
         for (row, cursor) in self.workspace.iter_rows(
