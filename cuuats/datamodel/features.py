@@ -142,7 +142,7 @@ class BaseFeature(object):
         added_fields = []
 
         for (field_name, field) in cls.fields.items():
-            if field_name not in layer_fields and field.storage:
+            if field.db_name not in layer_fields and field.storage:
                 storage = field.storage
                 if 'field_alias' not in storage:
                     storage['field_alias'] = field.label
