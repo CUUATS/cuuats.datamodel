@@ -462,6 +462,12 @@ class QuerySet(object):
             raise ObjectDoesNotExist(clone.query.where)
         raise MultipleObjectsReturned(clone.query.where)
 
+    def get_or_create(self, *args, **kwargs):
+        try:
+            return self.get(*args, **kwargs)
+        except ObjectDoesNotExist:
+            return self.feature_class(*args, **kwargs)
+
     def count(self):
         # TODO: Investigate whether using selection would be faster in cases
         # where the results are not already cached.

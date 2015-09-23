@@ -249,14 +249,40 @@ class BaseFeature(object):
         """
 
         new_row = self.serialize()
-        if new_row == self.db_row:
+        oid = getattr(self, self.fields.oid_field.name)
+
+        if new_row == self.db_row and oid is not None:
             return False
 
-        oid_field = self.fields.oid_field.name
-        oid = getattr(self, oid_field)
         field_names = [f.db_name for (n, f) in self.fields.items()
                        if not isinstance(self.values.get(n), DeferredValue)]
-        where_clause = '%s = %i' % (oid_field, oid)
+
+        if oid is None:
+            return self._insert(field_names, new_row)
+        else:
+            return self._update(oid, field_names, new_row)
+
+    def _insert(self, field_names, new_row):
+        # Remove the (null) OID from the fields and values.
+        oid_index = field_names.index(self.fields.oid_field.db_name)
+        del field_names[oid_index]
+        values = new_row[:]
+        del values[oid_index]
+
+        # Perform the insert.
+        oid = self.workspace.insert_row(self.name, field_names, values)
+
+        # Set the OID.
+        setattr(self, self.fields.oid_field.name, oid)
+
+        # Update the db_row.
+        new_row[oid_index] = oid
+        self.db_row = new_row
+
+        return True
+
+    def _update(self, oid, field_names, new_row):
+        where_clause = '%s = %i' % (self.fields.oid_field.name, oid)
         updated_count = 0
         for (row, cursor) in self.workspace.iter_rows(
                 self.name, field_names, True, where_clause):

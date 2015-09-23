@@ -165,6 +165,20 @@ class Workspace(object):
             raise TypeError('Invalid cursor')
         cursor.updateRow(values)
 
+    def insert_row(self, layer_name, field_names, values):
+        """
+        Insert a row in the table.
+        """
+
+        layer_path = os.path.join(self.path, layer_name)
+        self.editor.startEditing(False, False)
+
+        with arcpy.da.InsertCursor(layer_path, field_names) as cursor:
+            oid = cursor.insertRow(values)
+
+        self.editor.stopEditing(True)
+        return oid
+
     def get_domain(self, domain_name, domain_type=None):
         """
         Get the named domain if it exists.

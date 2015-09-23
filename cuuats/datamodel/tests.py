@@ -274,6 +274,15 @@ class TestWorkspace(WorkspaceFixture, unittest.TestCase):
                 self.assertTrue('Widget' not in widget_name)
                 self.assertTrue('Foo' in widget_name)
 
+    def test_insert_row(self):
+        field_names = [f[0] for f in self.FEATURE_CLASS_FIELDS]
+        values = ('DWIDGET', 'D-Widget', None, None, None, None)
+        self.workspace.insert_row(self.FEATURE_CLASS_NAME, field_names, values)
+
+        with arcpy.da.SearchCursor(self.fc_path, ['widget_name']) as cursor:
+            widget_names = [row[0] for row in cursor]
+        self.assertTrue('DWIDGET' in widget_names)
+
     def test_domains(self):
         self.assertEqual(len(self.workspace.domains), 1,
                          'incorrect number of domains in workspace')
@@ -367,6 +376,22 @@ class TestFeature(WorkspaceFixture, unittest.TestCase):
         self.assertEqual(
             self.cls.fields.keys()[0], 'widget_name',
             'fields are not ordered base on order argument')
+
+    def test_save_update(self):
+        feature = self.cls.objects.get(OBJECTID=1)
+        feature.widget_name = 'Some Widget'
+        result = feature.save()
+
+        self.assertTrue(result)
+        self.assertEqual(self.cls.objects.first().widget_name, 'Some Widget')
+
+    def test_save_insert(self):
+        feature_count = self.cls.objects.count()
+        feature = self.cls(widget_name='Newest Widget')
+        feature.save()
+
+        self.assertEqual(self.cls.objects.count(), feature_count + 1)
+        self.assertEqual(self.cls.objects.last().widget_name, 'Newest Widget')
 
     def test_save_no_change(self):
         # Update all features to set calculated field values.
