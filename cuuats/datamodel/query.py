@@ -328,6 +328,7 @@ class QuerySet(object):
         self._db_name_cache = None
         self._cache = None
         self._prefetch_rel = []
+        self._prefetch_deferred = []
 
     def __len__(self):
         return self.count()
@@ -520,6 +521,16 @@ class QuerySet(object):
         for rel in rels:
             if rel not in self._prefetch_rel:
                 self._prefetch_rel.append(rel)
+        return self
+
+    def prefetch_deferred(self, *field_names):
+        for field_name in field_names:
+            field = self.feature_class.fields.get(field_name, None)
+            if field is None:
+                raise AttributeError('%s does not have field "%s"' % (
+                    self.feature_class.__name__, field_name))
+            if field.db_name not in self.query.fields:
+                self.query.fields.append(field.db_name)
         return self
 
 
