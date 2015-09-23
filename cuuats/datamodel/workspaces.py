@@ -268,41 +268,49 @@ class Workspace(object):
         for row in arcpy.da.SearchCursor(summary_path, summary_fields):
             return dict(zip(summary_fields, row))
 
-    def set_nearest(self, rc_name, search_dist=None, update=False):
+    def update_spatial_relationship(self, rc_name, rel_type='INTERSECT',
+                                    search_radius=None):
         """
-        Assign or update values for a nearest feature relationship defined in
-        a relationship class.
+        Assign or update values for a foreign key based on the spatial
+        relationship of the features.
         """
 
         # TODO: Move this method to a separate class dedicated to dealing
         # with spatial relationships.
 
         rc_info = self.get_relationship_info(rc_name)
+        dest_path = os.path.join(self.path, rc_info.destination)
+        origin_path = os.path.join(self.path, rc_info.origin)
 
-        with self.make_layer(rc_info.origin) as origin_layer, \
-                self.make_layer(rc_info.destination) as destination_layer:
-            if not update:
-                where_clause = '%s IS NULL' % (rc_info.foreign_key,)
-                arcpy.SelectLayerByAttribute_management(
-                    destination_layer, where_clause=where_clause)
+        # Create field mappings. We really don't want any fields
+        # included, so we add the origin primary key, which will
+        # be removed automatically.
+        field_mappings = arcpy.FieldMappings()
+        field_map = arcpy.FieldMap()
+        field_map.addInputField(origin_path, rc_info.primary_key)
+        field_mappings.addFieldMap(field_map)
 
-            # Generate the near table.
-            near_name = self._make_layer_name()
-            near_path = 'in_memory/%s' % (near_name,)
-            arcpy.GenerateNearTable_analysis(
-                destination_layer, [origin_layer], near_path, search_dist)
+        # Execute the spatial join.
+        join_name = self._make_layer_name()
+        join_path = 'in_memory/%s' % (join_name,)
+        arcpy.SpatialJoin_analysis(
+            dest_path, origin_path, join_path, 'JOIN_ONE_TO_MANY',
+            'KEEP_COMMON', field_mappings, rel_type, search_radius)
 
-            # Join the near table to the destination feature class.
-            dest_pk = arcpy.Describe(destination_layer).OIDFieldName
-            arcpy.AddJoin_management(
-                destination_layer, dest_pk, near_path, 'IN_FID')
+        # Create a mapping: destination -> origin.
+        with arcpy.da.SearchCursor(
+                join_path, ['TARGET_FID', 'JOIN_FID']) as cursor:
+            oid_map = dict([(str(row[0]), row[1]) for row in cursor])
 
-            # Field calc the feature class field to match the near table.
-            calc_field = '%s.%s' % (rc_info.destination, rc_info.foreign_key)
-            calc_expression = '[%s.NEAR_FID]' % (near_name,)
-            arcpy.CalculateField_management(
-                destination_layer, calc_field, calc_expression)
+        # Delete the join layer.
+        arcpy.Delete_management(join_path)
+        if not oid_map:
+            return
 
-            # Remove the join and delete the near table from memory.
-            arcpy.RemoveJoin_management(destination_layer)
-            arcpy.Delete_management(near_path)
+        # Update the forien key.
+        for (row, cursor) in self.iter_rows(
+                rc_info.destination, ['OID@', rc_info.foreign_key], True):
+            oid, fk = row
+            new_fk = oid_map.get(str(oid), None)
+            if fk != new_fk:
+                self.update_row(cursor, [oid, new_fk])
