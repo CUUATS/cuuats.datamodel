@@ -1,7 +1,7 @@
 import os
 import re
 from collections import OrderedDict
-from cuuats.datamodel.fields import BaseField, OIDField, \
+from cuuats.datamodel.fields import BaseField, OIDField, CalculatedField, \
     ForeignKey, NumericField, StringField, BlobField, GeometryField
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
@@ -213,12 +213,12 @@ class BaseFeature(object):
         """
         Perform validation on each field in the feature, and return any
         validation error messages. Deferred values that have not been
-        retrieved are skipped, as are foreign keys.
+        retrieved are skipped, as are foreign keys and calculated fields.
         """
 
         messages = []
         for (field_name, field) in self.fields.items():
-            if isinstance(field, ForeignKey):
+            if isinstance(field, (ForeignKey, CalculatedField)):
                 continue
 
             # Skip deferred values that have not been retrieved.
