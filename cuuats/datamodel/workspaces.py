@@ -1,4 +1,5 @@
 import arcpy
+import logging
 import os
 import re
 from collections import namedtuple, OrderedDict
@@ -135,6 +136,16 @@ class Workspace(object):
         if update:
             cursor_factory = arcpy.da.UpdateCursor
             self.editor.startEditing(False, False)
+
+        logging.debug(
+            '{cursor}: SELECT {prefix}{fields} FROM '
+            '{table}{where}{postfix}'.format(
+                cursor=cursor_factory.__name__,
+                prefix=prefix + ' ' if prefix else '',
+                fields=', '.join(field_names),
+                table=layer_name,
+                where=' WHERE ' + where_clause if where_clause else '',
+                postfix=' ' + postfix if postfix else ''))
 
         with cursor_factory(layer_path, field_names, where_clause,
                             sql_clause=(prefix, postfix)) as cursor:
