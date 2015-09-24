@@ -466,6 +466,17 @@ class TestFeature(WorkspaceFixture, unittest.TestCase):
         self.assertTrue(price_msg not in self.instance.validate(),
                         'required_if validation message incorrectly generated')
 
+    def test_diff(self):
+        feature = self.cls.objects.get(OBJECTID=1)
+        feature.save()
+        original_name = feature.widget_name
+        feature.widget_name = 'Some Widget'
+        self.assertEqual(
+            feature.diff(), {'widget_name': (original_name, 'Some Widget')})
+
+        feature.save()
+        self.assertEqual(feature.diff(), {})
+
 
 class TestQuerySet(WorkspaceFixture, unittest.TestCase):
 

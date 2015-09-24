@@ -243,6 +243,17 @@ class BaseFeature(object):
                 getattr(self, n) for (n, f) in self.fields.items()
                 if not isinstance(self.values.get(n), DeferredValue)]
 
+    def diff(self):
+        """
+        Returns a dictionary containing unsaved changes.
+        """
+
+        field_names = [n for n in self.fields.keys()
+                       if not isinstance(self.values.get(n), DeferredValue)]
+        return dict([(field, (db, new)) for (field, db, new) in
+                     zip(field_names, self.db_row, self.serialize())
+                     if db != new])
+
     def save(self):
         """
         Update the corresponding row in feature class.
