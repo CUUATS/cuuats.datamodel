@@ -263,10 +263,12 @@ class TestWorkspace(WorkspaceFixture, unittest.TestCase):
 
     def test_update_row(self):
         field_names = [f[0] for f in self.FEATURE_CLASS_FIELDS]
-        for (row, cursor) in self.workspace.iter_rows(
-                self.FEATURE_CLASS_NAME, field_names, update=True):
-            row[0] = row[0].replace('Widget', 'Foo')
-            self.workspace.update_row(cursor, row)
+
+        with self.workspace.edit():
+            for (row, cursor) in self.workspace.iter_rows(
+                    self.FEATURE_CLASS_NAME, field_names, update=True):
+                row[0] = row[0].replace('Widget', 'Foo')
+                self.workspace.update_row(cursor, row)
 
         with arcpy.da.SearchCursor(self.fc_path, ['widget_name']) as cursor:
             for feature in cursor:

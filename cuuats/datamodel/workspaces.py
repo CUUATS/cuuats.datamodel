@@ -135,7 +135,6 @@ class Workspace(object):
 
         if update:
             cursor_factory = arcpy.da.UpdateCursor
-            self.editor.startEditing(False, False)
 
         logging.debug(
             '{cursor}: SELECT {prefix}{fields} FROM '
@@ -164,9 +163,6 @@ class Workspace(object):
                 else:
                     break
 
-        if update:
-            self.editor.stopEditing(True)
-
     def update_row(self, cursor, values):
         """
         Update the active row in the current cursor with the given values.
@@ -189,6 +185,15 @@ class Workspace(object):
 
         self.editor.stopEditing(True)
         return oid
+
+    @contextmanager
+    def edit(self):
+        self.editor.startEditing(False, False)
+        try:
+            yield
+            self.editor.stopEditing(True)
+        except:
+            self.editor.stopEditing(False)
 
     def get_domain(self, domain_name, domain_type=None):
         """
