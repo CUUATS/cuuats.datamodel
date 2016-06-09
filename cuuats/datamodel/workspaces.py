@@ -192,8 +192,9 @@ class Workspace(object):
         try:
             yield
             self.editor.stopEditing(True)
-        except:
+        except Exception, e:
             self.editor.stopEditing(False)
+            raise e
 
     def get_domain(self, domain_name, domain_type=None):
         """
