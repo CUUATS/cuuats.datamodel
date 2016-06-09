@@ -187,12 +187,18 @@ class Workspace(object):
         return oid
 
     @contextmanager
-    def edit(self):
-        self.editor.startEditing(False, False)
+    def edit(self, versioned=True):
+        self.editor.startEditing(False, versioned)
+        if versioned:
+            self.editor.startOperation()
         try:
             yield
+            if versioned:
+                self.editor.stopOperation()
             self.editor.stopEditing(True)
         except Exception, e:
+            if versioned:
+                self.editor.abortOperation()
             self.editor.stopEditing(False)
             raise e
 
