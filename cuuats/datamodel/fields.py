@@ -1,4 +1,5 @@
 import warnings
+from numbers import Number
 from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.scales import BaseScale
@@ -14,6 +15,8 @@ class BaseField(object):
         self.label = label
         self.name = kwargs.get('name', None)
         self.db_name = kwargs.get('db_name', None)
+        self.db_scale = kwargs.get('db_scale', None)
+        self.db_precision = kwargs.get('db_precision', None)
         self.deferred = kwargs.get('deferred', False)
         self.required = kwargs.get('required', False)
         self.required_if = kwargs.get('required_if', None)
@@ -72,17 +75,23 @@ class BaseField(object):
         if layer_field is None:
             warnings.warn('%s is not a field of %s' % (
                 field_name, layer_name))
-        else:
-            self.name = field_name
-            if self.db_name is None:
-                self.db_name = field_name
-            if layer_field.domain:
-                self.domain_name = layer_field.domain
-                domain = workspace.get_domain(layer_field.domain)
-                if domain.domainType == 'CodedValue':
-                    self.choices.extend(domain.codedValues)
-                elif hasattr(self, 'min') and hasattr(self, 'max'):
-                    self.min, self.max = domain.range
+            return None
+
+        self.name = field_name
+        if self.db_name is None:
+            self.db_name = field_name
+        if layer_field.domain:
+            self.domain_name = layer_field.domain
+            domain = workspace.get_domain(layer_field.domain)
+            if domain.domainType == 'CodedValue':
+                self.choices.extend(domain.codedValues)
+            elif hasattr(self, 'min') and hasattr(self, 'max'):
+                self.min, self.max = domain.range
+        if layer_field.scale:
+            self.db_scale = layer_field.scale
+        if layer_field.precision:
+            self.db_precision = layer_field.precision
+        return layer_field
 
     def validate(self, value):
         """
@@ -99,6 +108,20 @@ class BaseField(object):
             return ['%s is invalid' % (self.label,)]
 
         return []
+
+    def has_changed(self, old, new):
+        """
+        Returns true if the new value is different from the old value.
+        """
+
+        if self.db_scale is not None and isinstance(old, Number) and \
+                isinstance(new, Number):
+            # When the scale is set, we round to that number of decimal places
+            # before comparing in order to determine whether the values will be
+            # equal once saved in the database.
+            return round(old, self.db_scale) != round(new, self.db_scale)
+
+        return old != new
 
 
 class OIDField(BaseField):

@@ -1,6 +1,6 @@
 import os
 import re
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from cuuats.datamodel.fields import BaseField, OIDField, CalculatedField, \
     ForeignKey, NumericField, StringField, BlobField, GeometryField
 from cuuats.datamodel.field_values import DeferredValue
@@ -78,6 +78,9 @@ class FieldManager(object):
         owner._fields = FieldSet([d[2:] for d in sorted(fields)])
 
 
+DiffValues = namedtuple('DiffValues', ['old', 'new'])
+
+
 class BaseFeature(object):
     """
     Base class used to interact with data stored in a geodatabase feature
@@ -87,7 +90,7 @@ class BaseFeature(object):
     name = None
     workspace = None
     attachments = None
-    db_row = None
+    db_values = None
     objects = Manager()
     fields = FieldManager()
     related_classes = None
@@ -162,8 +165,9 @@ class BaseFeature(object):
                 raise KeyError('Invalid field name: %s' % (field_name))
 
         self.values = kwargs
-        self.db_row = [kwargs[f] for f in self.fields.keys() if f in kwargs
-                       and not isinstance(kwargs[f], DeferredValue)]
+        self.db_values = dict(
+            [(self.fields[k].db_name, v) for (k, v) in kwargs.items()
+             if not isinstance(v, DeferredValue)])
         self._prefetch_cache = {}
 
     def __repr__(self):
@@ -239,46 +243,45 @@ class BaseFeature(object):
         that have not been retrieved are excluded.
         """
 
-        return [self.values.get(n, None) if isinstance(f, ForeignKey) else
-                getattr(self, n) for (n, f) in self.fields.items()
-                if not isinstance(self.values.get(n), DeferredValue)]
+        return dict(
+            [(f.db_name, self.values.get(n, None))
+             if isinstance(f, ForeignKey) else
+             (f.db_name, getattr(self, n)) for (n, f) in self.fields.items()
+             if not isinstance(self.values.get(n), DeferredValue)])
 
     def diff(self):
         """
         Returns a dictionary containing unsaved changes.
         """
 
-        field_names = [n for n in self.fields.keys()
-                       if not isinstance(self.values.get(n), DeferredValue)]
-        return dict([(field, (db, new)) for (field, db, new) in
-                     zip(field_names, self.db_row, self.serialize())
-                     if db != new])
+        new = self.serialize()
+        db_fields = [(f.db_name, f) for f in self.fields.values()]
+        return dict(
+            [(n, DiffValues(self.db_values[n], new[n]))
+             for (n, f) in db_fields
+             if n in new and n in self.db_values and
+             f.has_changed(self.db_values[n], new[n])])
 
     def save(self):
         """
         Update the corresponding row in feature class.
         """
 
-        new_row = self.serialize()
         oid = getattr(self, self.fields.oid_field.name)
-
-        if new_row == self.db_row and oid is not None:
-            return False
-
-        field_names = [f.db_name for (n, f) in self.fields.items()
-                       if not isinstance(self.values.get(n), DeferredValue)]
-
         if oid is None:
-            return self._insert(field_names, new_row)
+            return self._insert(self.serialize())
         else:
-            return self._update(oid, field_names, new_row)
+            changes = self.diff()
+            if not changes:
+                return False
 
-    def _insert(self, field_names, new_row):
+            field_values = dict([(n, v.new) for (n, v) in changes.items()])
+            return self._update(oid, field_values)
+
+    def _insert(self, field_values):
         # Remove the (null) OID from the fields and values.
-        oid_index = field_names.index(self.fields.oid_field.db_name)
-        del field_names[oid_index]
-        values = new_row[:]
-        del values[oid_index]
+        del field_values[self.fields.oid_field.db_name]
+        field_names, values = zip(*field_values.items())
 
         # Perform the insert.
         oid = self.workspace.insert_row(self.name, field_names, values)
@@ -287,23 +290,24 @@ class BaseFeature(object):
         setattr(self, self.fields.oid_field.name, oid)
 
         # Update the db_row.
-        new_row[oid_index] = oid
-        self.db_row = new_row
+        field_values[self.fields.oid_field.db_name] = oid
+        self.db_values.update(field_values)
 
         return True
 
-    def _update(self, oid, field_names, new_row):
+    def _update(self, oid, field_values):
         where_clause = '%s = %i' % (self.fields.oid_field.name, oid)
+        field_names, values = zip(*field_values.items())
         updated_count = 0
         for (row, cursor) in self.workspace.iter_rows(
                 self.name, field_names, True, where_clause):
-            self.workspace.update_row(cursor, new_row)
+            self.workspace.update_row(cursor, values)
             updated_count += 1
 
         if updated_count == 0:
             raise LookupError('A row with OID %i was not found' % (oid,))
         else:
-            self.db_row = new_row
+            self.db_values.update(field_values)
             return True
 
     def eval(self, expression):

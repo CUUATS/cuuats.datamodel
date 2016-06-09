@@ -148,7 +148,8 @@ class TestFields(unittest.TestCase):
             oid_field = OIDField('OBJECTID')
             geometry_field = GeometryField('SHAPE')
             string_field = StringField('String Field', required=True)
-            numeric_field = NumericField('Numeric Field', min=0, max=10)
+            numeric_field = NumericField(
+                'Numeric Field', min=0, max=10, db_scale=3)
             double_method = MethodField(
                 'Numeric Field Doubled', method_name='_double')
             weights_field = WeightsField('Weights Field', weights={
@@ -214,6 +215,13 @@ class TestFields(unittest.TestCase):
         self.assertEqual(len(field.validate(0)), 0)
         self.assertEqual(len(field.validate(5)), 0)
         self.assertEqual(len(field.validate(10)), 0)
+
+    def test_numeric_field_has_changed(self):
+        field = self.inst_a.get_field('numeric_field')
+        self.assertFalse(field.has_changed(10, 10))
+        self.assertTrue(field.has_changed(10, 15))
+        self.assertFalse(field.has_changed(1.002, 1.0022))
+        self.assertTrue(field.has_changed(1.002, 1.0026))
 
     def test_method_field(self):
         self.inst_a.numeric_field = 2
