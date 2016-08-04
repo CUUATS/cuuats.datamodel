@@ -1,9 +1,12 @@
 import warnings
+from collections import namedtuple
 from numbers import Number
 from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.field_values import DeferredValue
-from cuuats.datamodel.scales import BaseScale
+from cuuats.datamodel.scales import BaseScale, ScaleLevel
 from cuuats.datamodel.query import RelatedManager
+
+SummaryLevel = namedtuple('SummaryLevel', ['weight', 'value', 'label'])
 
 
 class BaseField(object):
@@ -122,6 +125,14 @@ class BaseField(object):
             return round(old, self.db_scale) != round(new, self.db_scale)
 
         return old != new
+
+    def summarize(self, instance):
+        """
+        Returns the summary level for the given instance.
+        """
+
+        value = self.__get__(instance, None)
+        return SummaryLevel(0, value, str(value))
 
 
 class OIDField(BaseField):
@@ -327,28 +338,51 @@ class ScaleField(CalculatedField):
 
     def _get_scale_for(self, instance):
         if isinstance(self.scale, BaseScale):
-            return self.scale
+            return (self.scale, 0)
 
-        for (condition, scale) in self.scale:
+        for (scale_info, index) in enumerate(self.scale):
+            if len(scale_info) == 3:
+                condition, scale, weight = scale_info
+            else:
+                condition, scale = scale_info
+                weight = index
             if instance.check_condition(condition):
-                return scale
+                return (scale, weight)
 
-        return None
+        return (None, 0)
+
+    def _get_value_for(self, instance):
+        value = instance.eval(self.value_field)
+        if self.use_description and isinstance(value, CodedValue):
+            value = value.description
+        return value
 
     def calculate(self, instance):
         """
         Calculate the value for this field based on the state of the instance.
         """
 
-        value = instance.eval(self.value_field)
-        if self.use_description and isinstance(value, CodedValue):
-            value = value.description
-
-        scale = self._get_scale_for(instance)
+        value = self._get_value_for(instance)
+        scale, weight = self._get_scale_for(instance)
         if not scale:
             return self.default
 
         return scale.score(value)
+
+    def summarize(self, instance):
+        """
+        Returns the summary level for the given instance.
+        """
+
+        value = self._get_value_for(instance)
+        scale, weight = self._get_scale_for(instance)
+        if not scale:
+            return SummaryLevel(0, self.default, str(self.default))
+
+        level = scale.get_level(value)
+        if isinstance(level, ScaleLevel):
+            return SummaryLevel(level.weight, level.value, level.label)
+        return SummaryLevel(0, level, str(level))
 
 
 class ForeignKey(BaseField):
