@@ -381,7 +381,7 @@ class ScaleField(CalculatedField):
 
         level = scale.get_level(value)
         if isinstance(level, ScaleLevel):
-            return SummaryLevel(level.weight, level.value, level.label)
+            return SummaryLevel(level.weight, level.score, level.label)
         return SummaryLevel(0, level, str(level))
 
 

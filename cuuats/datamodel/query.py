@@ -506,6 +506,30 @@ class QuerySet(object):
         clone.query.reverse_order()
         return clone.first()
 
+    def summarize(self, summary_field_name, **kwargs):
+        summary_field = self.feature_class.fields.get(summary_field_name, None)
+        if not summary_field:
+            raise KeyError('Invalid summary field name')
+
+        levels = []
+        results = {}
+        for feature in self:
+            level = summary_field.summarize(feature)
+            level_key = hash(level)
+
+            if level not in levels:
+                levels.append(level)
+                results[level_key] = dict(zip(kwargs.keys(), [0]*len(kwargs)))
+                results[level_key]['count'] = 0
+                results[level_key]['value'] = level.value
+                results[level_key]['label'] = level.label
+
+            results[level_key]['count'] += 1
+            for value_key, value_expr in kwargs.items():
+                results[level_key][value_key] += feature.eval(value_expr)
+
+        return [results[hash(l)] for l in sorted(levels)]
+
     def aggregate(self, fields):
         return self.feature_class.workspace.summarize(
             self.feature_class.name,
