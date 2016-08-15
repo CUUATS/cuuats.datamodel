@@ -375,14 +375,15 @@ class ScaleField(CalculatedField):
         """
 
         value = self._get_value_for(instance)
-        scale, weight = self._get_scale_for(instance)
+        scale, scale_weight = self._get_scale_for(instance)
         if not scale:
-            return SummaryLevel(0, self.default, str(self.default))
+            return SummaryLevel((0, 0), self.default, str(self.default))
 
         level = scale.get_level(value)
         if isinstance(level, ScaleLevel):
-            return SummaryLevel(level.weight, level.score, level.label)
-        return SummaryLevel(0, level, str(level))
+            return SummaryLevel(
+                (scale_weight, level.weight), level.score, level.label)
+        return SummaryLevel((scale_weight, 0), level, str(level))
 
 
 class ForeignKey(BaseField):
