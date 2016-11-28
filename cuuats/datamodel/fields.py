@@ -340,7 +340,7 @@ class ScaleField(CalculatedField):
         if isinstance(self.scale, BaseScale):
             return (self.scale, 0)
 
-        for (scale_info, index) in enumerate(self.scale):
+        for (index, scale_info) in enumerate(self.scale):
             if len(scale_info) == 3:
                 condition, scale, weight = scale_info
             else:
