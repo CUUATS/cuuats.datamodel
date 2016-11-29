@@ -304,6 +304,10 @@ class WeightsField(CalculatedField):
     def __init__(self, name, **kwargs):
         super(WeightsField, self).__init__(name, **kwargs)
         self.weights = kwargs.get('weights')
+        self.scale = kwargs.get('scale', None)
+
+        if self.scale and not isinstance(self.scale, BaseScale):
+            raise TypeError('Scale must be a subclass of BaseScale or None')
 
     def _get_value(self, instance, field_name):
         return getattr(instance, field_name)
@@ -318,6 +322,21 @@ class WeightsField(CalculatedField):
         else:
             return sum([self._get_value(instance, v)*w
                         for (v, w) in self.weights.items()])
+
+    def summarize(self, instance):
+        """
+        Returns the summary level for the given instance.
+        """
+
+        if not self.scale:
+            raise AttributeError(
+                'Weights fields must have a scale to be summarized')
+
+        value = self.calculate(instance)
+        level = self.scale.get_level(value)
+        if isinstance(level, ScaleLevel):
+            return SummaryLevel(level.weight, level.score, level.label)
+        return SummaryLevel(0, level, str(level))
 
 
 class ScaleField(CalculatedField):
