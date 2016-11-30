@@ -1,12 +1,39 @@
-from collections import namedtuple
+class ScaleLevel(object):
+    """
+    A value level used in scales.
+    """
 
-ScaleLevel = namedtuple('ScaleLevel', ['score', 'label', 'weight'])
+    def __init__(self, value, label, weight=0, **kwargs):
+        self.value = value
+        self.label = label
+        self.weight = weight
+        self.meta = kwargs
+
+    def _as_tuple(self):
+        return (self.weight, self.value, self.label)
+
+    def __cmp__(self, other):
+        return cmp(self._as_tuple(), other._as_tuple())
+
+    def __hash__(self):
+        return hash(self._as_tuple())
+
+    def wrap(self, weight):
+        return ScaleLevel(
+            self.value, self.label, (weight, self.weight), **self.meta)
 
 
 class BaseScale(object):
     """
     Base scale used to score raw values.
     """
+
+    def get_levels(self):
+        """
+        Returns a list of all possible scale levels.
+        """
+
+        raise NotImplemented
 
     def get_level(self, value):
         """
@@ -22,7 +49,7 @@ class BaseScale(object):
 
         level = self.get_level(value)
         if isinstance(level, ScaleLevel):
-            return level.score
+            return level.value
         return level
 
 
@@ -33,6 +60,13 @@ class StaticScale(BaseScale):
 
     def __init__(self, level):
         self.level = level
+
+    def get_levels(self):
+        """
+        Returns a list of all possible scale levels.
+        """
+
+        return [self.level]
 
     def get_level(self, value):
         """
@@ -59,6 +93,13 @@ class BreaksScale(BaseScale):
         self.levels = levels
         self.right = right
 
+    def get_levels(self):
+        """
+        Returns a list of all possible scale levels.
+        """
+
+        return self.levels
+
     def get_level(self, value):
         """
         Retuns a ScaleLevel object or a number corresponding to the input value.
@@ -78,6 +119,13 @@ class DictScale(BaseScale):
     def __init__(self, levels, default=0):
         self.levels = levels
         self.default = default
+
+    def get_levels(self):
+        """
+        Returns a list of all possible scale levels.
+        """
+
+        return self.levels
 
     def get_level(self, value):
         """
