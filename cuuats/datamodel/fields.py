@@ -109,19 +109,26 @@ class BaseField(object):
 
         return []
 
+    def round(self, value):
+        """
+        Rounds the given value to the number of decimal places it will have
+        in the database.
+        """
+
+        if self.db_scale is not None and isinstance(value, Number):
+            return round(value, self.db_scale)
+
+        return value
+
     def has_changed(self, old, new):
         """
         Returns true if the new value is different from the old value.
         """
 
-        if self.db_scale is not None and isinstance(old, Number) and \
-                isinstance(new, Number):
-            # When the scale is set, we round to that number of decimal places
-            # before comparing in order to determine whether the values will be
-            # equal once saved in the database.
-            return round(old, self.db_scale) != round(new, self.db_scale)
-
-        return old != new
+        # When the scale is set, we round to that number of decimal places
+        # before comparing in order to determine whether the values will be
+        # equal once saved in the database.
+        return self.round(old) != self.round(new)
 
     def summarize(self, instance):
         """
@@ -288,7 +295,7 @@ class CalculatedField(BaseField):
             raise AttributeError(
                 'Weights fields must have a scale to be summarized')
 
-        value = self.calculate(instance)
+        value = self.round(self.calculate(instance))
         return self._as_scale_level(self.scale.get_level(value))
 
     def get_levels(self):
