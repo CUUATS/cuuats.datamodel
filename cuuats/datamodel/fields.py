@@ -256,6 +256,12 @@ class CalculatedField(BaseField):
         # Overridden by subclasses
         self.condition = kwargs.get('condition', None)
         self.default = kwargs.get('default', None)
+        self.scale = kwargs.get('scale', None)
+
+    def _as_scale_level(self, level):
+        if isinstance(level, ScaleLevel):
+            return level
+        return ScaleLevel(level, str(level))
 
     def __get__(self, instance, owner):
         if not instance.check_condition(self.condition):
@@ -272,6 +278,30 @@ class CalculatedField(BaseField):
 
         # Overridden by subclasses
         return self.default
+
+    def summarize(self, instance):
+        """
+        Returns the scale level for the given instance.
+        """
+
+        if not self.scale:
+            raise AttributeError(
+                'Weights fields must have a scale to be summarized')
+
+        value = self.calculate(instance)
+        return self._as_scale_level(self.scale.get_level(value))
+
+    def get_levels(self):
+        """
+        Returns a sorted list of all possible scale levels.
+        """
+
+        if not self.scale:
+            raise AttributeError(
+                'Weights fields must have a scale to be summarized')
+
+        return sorted(
+            [self._as_scale_level(l) for l in self.scale.get_levels()])
 
 
 class MethodField(CalculatedField):
@@ -301,18 +331,9 @@ class WeightsField(CalculatedField):
     def __init__(self, name, **kwargs):
         super(WeightsField, self).__init__(name, **kwargs)
         self.weights = kwargs.get('weights')
-        self.scale = kwargs.get('scale', None)
-
-        if self.scale and not isinstance(self.scale, BaseScale):
-            raise TypeError('Scale must be a subclass of BaseScale or None')
 
     def _get_value(self, instance, field_name):
         return getattr(instance, field_name)
-
-    def _as_scale_level(self, level):
-        if isinstance(level, ScaleLevel):
-            return level
-        return ScaleLevel(level, str(level))
 
     def calculate(self, instance):
         """
@@ -325,30 +346,6 @@ class WeightsField(CalculatedField):
             return sum([self._get_value(instance, v)*w
                         for (v, w) in self.weights.items()])
 
-    def summarize(self, instance):
-        """
-        Returns the scale level for the given instance.
-        """
-
-        if not self.scale:
-            raise AttributeError(
-                'Weights fields must have a scale to be summarized')
-
-        value = self.calculate(instance)
-        return self._as_scale_level(self.scale.get_level(value))
-
-    def get_levels(self):
-        """
-        Returns a sorted list of all possible scale levels.
-        """
-
-        if not self.scale:
-            raise AttributeError(
-                'Weights fields must have a scale to be summarized')
-
-        return sorted(
-            [self._as_scale_level(l) for l in self.scale.get_levels()])
-
 
 class ScaleField(CalculatedField):
 
@@ -358,7 +355,6 @@ class ScaleField(CalculatedField):
 
     def __init__(self, name, **kwargs):
         super(ScaleField, self).__init__(name, **kwargs)
-        self.scale = kwargs.get('scale')
         self.value_field = kwargs.get('value_field')
         self.use_description = kwargs.get('use_description', False)
 
