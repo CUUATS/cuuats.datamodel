@@ -125,7 +125,7 @@ class DictScale(BaseScale):
         Returns a list of all possible scale levels.
         """
 
-        return self.levels
+        return self.levels.values()
 
     def get_level(self, value):
         """
