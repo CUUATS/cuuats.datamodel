@@ -300,8 +300,8 @@ class CalculatedField(BaseField):
             raise AttributeError(
                 'Weights fields must have a scale to be summarized')
 
-        return sorted(
-            [self._as_scale_level(l) for l in self.scale.get_levels()])
+        return sorted(list(set(
+            [self._as_scale_level(l) for l in self.scale.get_levels()])))
 
 
 class MethodField(CalculatedField):
@@ -424,7 +424,7 @@ class ScaleField(CalculatedField):
         for (condition, scale, weight) in self._unpack_scales():
             levels.extend(
                 [self._as_scale_level(weight, l) for l in scale.get_levels()])
-        return sorted(levels)
+        return sorted(list(set(levels)))
 
 
 class ForeignKey(BaseField):
