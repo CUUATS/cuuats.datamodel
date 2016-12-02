@@ -2,7 +2,7 @@ import warnings
 from numbers import Number
 from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.field_values import DeferredValue
-from cuuats.datamodel.scales import BaseScale
+from cuuats.datamodel.scales import BaseScale, ScaleLevel
 from cuuats.datamodel.query import RelatedManager
 
 
@@ -109,19 +109,34 @@ class BaseField(object):
 
         return []
 
+    def round(self, value):
+        """
+        Rounds the given value to the number of decimal places it will have
+        in the database.
+        """
+
+        if self.db_scale is not None and isinstance(value, Number):
+            return round(value, self.db_scale)
+
+        return value
+
     def has_changed(self, old, new):
         """
         Returns true if the new value is different from the old value.
         """
 
-        if self.db_scale is not None and isinstance(old, Number) and \
-                isinstance(new, Number):
-            # When the scale is set, we round to that number of decimal places
-            # before comparing in order to determine whether the values will be
-            # equal once saved in the database.
-            return round(old, self.db_scale) != round(new, self.db_scale)
+        # When the scale is set, we round to that number of decimal places
+        # before comparing in order to determine whether the values will be
+        # equal once saved in the database.
+        return self.round(old) != self.round(new)
 
-        return old != new
+    def summarize(self, instance):
+        """
+        Returns the summary level for the given instance.
+        """
+
+        value = self.__get__(instance, None)
+        return SummaryLevel(0, value, str(value))
 
 
 class OIDField(BaseField):
@@ -248,6 +263,12 @@ class CalculatedField(BaseField):
         # Overridden by subclasses
         self.condition = kwargs.get('condition', None)
         self.default = kwargs.get('default', None)
+        self.scale = kwargs.get('scale', None)
+
+    def _as_scale_level(self, level):
+        if isinstance(level, ScaleLevel):
+            return level
+        return ScaleLevel(level, str(level))
 
     def __get__(self, instance, owner):
         if not instance.check_condition(self.condition):
@@ -264,6 +285,30 @@ class CalculatedField(BaseField):
 
         # Overridden by subclasses
         return self.default
+
+    def summarize(self, instance):
+        """
+        Returns the scale level for the given instance.
+        """
+
+        if not self.scale:
+            raise AttributeError(
+                'Weights fields must have a scale to be summarized')
+
+        value = self.round(self.calculate(instance))
+        return self._as_scale_level(self.scale.get_level(value))
+
+    def get_levels(self):
+        """
+        Returns a sorted list of all possible scale levels.
+        """
+
+        if not self.scale:
+            raise AttributeError(
+                'Weights fields must have a scale to be summarized')
+
+        return sorted(list(set(
+            [self._as_scale_level(l) for l in self.scale.get_levels()])))
 
 
 class MethodField(CalculatedField):
@@ -317,7 +362,6 @@ class ScaleField(CalculatedField):
 
     def __init__(self, name, **kwargs):
         super(ScaleField, self).__init__(name, **kwargs)
-        self.scale = kwargs.get('scale')
         self.value_field = kwargs.get('value_field')
         self.use_description = kwargs.get('use_description', False)
 
@@ -325,30 +369,69 @@ class ScaleField(CalculatedField):
             raise TypeError('Scale must be a subclass of BaseScale or a '
                             'list containing tuples of conditions and scales')
 
-    def _get_scale_for(self, instance):
+    def _unpack_scales(self):
         if isinstance(self.scale, BaseScale):
-            return self.scale
+            yield (None, self.scale, 0)
+        else:
+            for (index, scale_info) in enumerate(self.scale):
+                if len(scale_info) == 3:
+                    yield scale_info
+                else:
+                    condition, scale = scale_info
+                    yield (condition, scale, index)
 
-        for (condition, scale) in self.scale:
+    def _get_scale_for(self, instance):
+        for (condition, scale, weight) in self._unpack_scales():
             if instance.check_condition(condition):
-                return scale
+                return (scale, weight)
 
-        return None
+        return (None, 0)
+
+    def _get_value_for(self, instance):
+        value = instance.eval(self.value_field)
+        if self.use_description and isinstance(value, CodedValue):
+            value = value.description
+        return value
+
+    def _as_scale_level(self, scale_weight, level):
+        if isinstance(level, ScaleLevel):
+            return level.wrap(scale_weight)
+        return ScaleLevel(level, str(level), (scale_weight, 0))
 
     def calculate(self, instance):
         """
         Calculate the value for this field based on the state of the instance.
         """
 
-        value = instance.eval(self.value_field)
-        if self.use_description and isinstance(value, CodedValue):
-            value = value.description
-
-        scale = self._get_scale_for(instance)
+        value = self._get_value_for(instance)
+        scale, weight = self._get_scale_for(instance)
         if not scale:
             return self.default
 
         return scale.score(value)
+
+    def summarize(self, instance):
+        """
+        Returns the summary level for the given instance.
+        """
+
+        value = self._get_value_for(instance)
+        scale, scale_weight = self._get_scale_for(instance)
+        if not scale:
+            return ScaleLevel(self.default, str(self.default), (0, 0))
+
+        return self._as_scale_level(scale_weight, scale.get_level(value))
+
+    def get_levels(self):
+        """
+        Returns a sorted list of all possible scale levels.
+        """
+
+        levels = []
+        for (condition, scale, weight) in self._unpack_scales():
+            levels.extend(
+                [self._as_scale_level(weight, l) for l in scale.get_levels()])
+        return sorted(list(set(levels)))
 
 
 class ForeignKey(BaseField):
