@@ -24,7 +24,8 @@ setup(name='cuuats.datamodel',
       keywords='ArcGIS GIS data geodatabase',
       author='Matt Yoder',
       author_email='myoder@ccrpc.org',
-      url='http://cuuats.org/',
+      url='https://cuuats.org/',
+      download_url='https://github.com/CUUATS/cuuats.datamodel/tarball/0.1.0',
       packages=find_packages(exclude=['ez_setup']),
       namespace_packages=['cuuats']
       )
