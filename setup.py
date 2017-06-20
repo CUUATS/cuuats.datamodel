@@ -3,7 +3,7 @@
 from setuptools import find_packages
 from setuptools import setup
 
-version = '0.1'
+version = '0.1.0'
 
 setup(name='cuuats.datamodel',
       version=version,
