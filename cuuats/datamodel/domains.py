@@ -41,8 +41,11 @@ class CodedValue(object):
             obj = float.__new__(FloatCodedValue, value)
         elif isinstance(value, str):
             obj = str.__new__(StringCodedValue, value)
+        elif isinstance(value, unicode):
+            obj = unicode.__new__(UnicodeCodedValue, value)
         else:
-            raise TypeError('Value must be of type int, long, float or str')
+            raise TypeError(
+                'Value must be of type int, long, float, str, or unicode')
         obj.description = description
         return obj
 
@@ -76,4 +79,10 @@ class FloatCodedValue(CodedValue, float):
 class StringCodedValue(CodedValue, str):
     """
     A string coded value.
+    """
+
+
+class UnicodeCodedValue(CodedValue, unicode):
+    """
+    A unicode coded value.
     """
