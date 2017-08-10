@@ -25,7 +25,7 @@ setup(name='cuuats.datamodel',
       author='Matt Yoder',
       author_email='myoder@ccrpc.org',
       url='https://cuuats.org/',
-      download_url='https://github.com/CUUATS/cuuats.datamodel/tarball/0.1.0',
+      download_url='https://github.com/CUUATS/cuuats.datamodel/tarball/0.1.1',
       packages=find_packages(exclude=['ez_setup']),
       namespace_packages=['cuuats']
       )
