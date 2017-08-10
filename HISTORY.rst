@@ -1,7 +1,7 @@
 Changelog
 =========
 
-0.1.1 (2017-07-10)
+0.1.1 (2017-08-10)
 ------------------
 
 * Added unicode type for coded domain values.
