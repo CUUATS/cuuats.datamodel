@@ -29,7 +29,6 @@ class WorkspaceFixture(object):
     DOMAIN_NAME = 'YesOrNo'
     DOMAIN_DESCRIPTION = 'Domain for yes or no responses'
     DOMAIN_FIELD_TYPE = 'SHORT'
-    DOMAIN_TYPE = 'CODED'
     DOMAIN_VALUES = {
         50: 'No',
         100: 'Yes',
@@ -50,6 +49,55 @@ class WorkspaceFixture(object):
         ('B-Widgety Widget', None, None, 50, None, None, (-2.0, 5.5)),
         ('My Widget C', 'Best widget', None, None, None, None, (0.0, 4.0)),
     )
+    RELATED_CLASS_NAME = 'Warehouse'
+    RELATED_CLASS_TYPE = 'POINT'
+    RELATED_CLASS_FIELDS = (
+        ('warehouse_name', 'TEXT', 100, None),
+        ('warehouse_address', 'TEXT', None, None),
+        ('warehouse_zipcode', 'LONG', 5, None),
+        ('warehouse_open', DOMAIN_FIELD_TYPE, None, DOMAIN_NAME),
+    )
+    RELATED_CLASS_DATA = (
+        ('Widget Distribution Center', '123 Main St', 99999, 100, (1.0, 3.3)),
+        ('Widgets International', '88 Shipping Dr', 11111, 100, (-6.0, 4.2)),
+    )
+
+    @classmethod
+    def createCodedValuesDomain(cls, name, description, field_type, values):
+        """Add a coded values domain, and populate it with coded values."""
+
+        arcpy.CreateDomain_management(
+            cls.gdb_backup_path, name, description, field_type, 'CODED')
+
+        for (code, desc) in values.items():
+            arcpy.AddCodedValueToDomain_management(
+                cls.gdb_backup_path, name, code, desc)
+
+    @classmethod
+    def createFeatureClass(cls, name, fc_type, fields):
+        """Create a feature class, and add fields."""
+
+        fc_path = os.path.join(cls.gdb_backup_path, name)
+        arcpy.CreateFeatureclass_management(cls.gdb_backup_path, name, fc_type)
+
+        # Add some fields to the feature class.
+        for (field_name, field_type, field_precision, field_domain) in fields:
+            arcpy.AddField_management(
+                fc_path, field_name, field_type, field_precision,
+                field_domain=field_domain)
+
+        return fc_path
+
+    @classmethod
+    def populateFeatureClass(cls, fc_path, fields, data, shape='SHAPE@XY'):
+        """Populate a feature class with data."""
+
+        field_names = [f[0] for f in fields] + [shape]
+        with arcpy.da.InsertCursor(fc_path, field_names) as cursor:
+            for row in data:
+                assert len(row) == len(field_names), \
+                    'Row length does not match field length'
+                cursor.insertRow(row)
 
     @classmethod
     def setUpModule(cls):
@@ -59,33 +107,25 @@ class WorkspaceFixture(object):
             cls.workspace_dir, cls.GDB_BACKUP_NAME)
         arcpy.CreateFileGDB_management(cls.workspace_dir, cls.GDB_BACKUP_NAME)
 
-        # Add a coded values domain, and populate it with coded values.
-        arcpy.CreateDomain_management(
-            cls.gdb_backup_path, cls.DOMAIN_NAME, cls.DOMAIN_DESCRIPTION,
-            cls.DOMAIN_FIELD_TYPE, cls.DOMAIN_TYPE)
+        # Add YesOrNo domain.
+        cls.createCodedValuesDomain(cls.DOMAIN_NAME, cls.DOMAIN_DESCRIPTION,
+                                    cls.DOMAIN_FIELD_TYPE, cls.DOMAIN_VALUES)
 
-        for (code, desc) in cls.DOMAIN_VALUES.items():
-            arcpy.AddCodedValueToDomain_management(
-                cls.gdb_backup_path, cls.DOMAIN_NAME, code, desc)
+        # Create the feature classes.
+        fc_path = cls.createFeatureClass(
+            cls.FEATURE_CLASS_NAME, cls.FEATURE_CLASS_TYPE,
+            cls.FEATURE_CLASS_FIELDS)
 
-        # Create a feature class.
-        fc_path = os.path.join(cls.gdb_backup_path, cls.FEATURE_CLASS_NAME)
-        arcpy.CreateFeatureclass_management(
-            cls.gdb_backup_path, cls.FEATURE_CLASS_NAME,
-            cls.FEATURE_CLASS_TYPE)
+        rc_path = cls.createFeatureClass(
+            cls.RELATED_CLASS_NAME, cls.RELATED_CLASS_TYPE,
+            cls.RELATED_CLASS_FIELDS)
 
-        # Add some fields to the feature class.
-        for (field_name, field_type, field_precision, field_domain) in \
-                cls.FEATURE_CLASS_FIELDS:
-            arcpy.AddField_management(
-                fc_path, field_name, field_type, field_precision,
-                field_domain=field_domain)
+        # Populate the feature classes with data.
+        cls.populateFeatureClass(
+            fc_path, cls.FEATURE_CLASS_FIELDS, cls.FEATURE_CLASS_DATA)
 
-        # Populate the feature class with data.
-        field_names = [f[0] for f in cls.FEATURE_CLASS_FIELDS] + ['SHAPE@XY']
-        with arcpy.da.InsertCursor(fc_path, field_names) as cursor:
-            for row in cls.FEATURE_CLASS_DATA:
-                cursor.insertRow(row)
+        cls.populateFeatureClass(
+            rc_path, cls.RELATED_CLASS_FIELDS, cls.RELATED_CLASS_DATA)
 
     @classmethod
     def tearDownModule(cls):
@@ -98,6 +138,7 @@ class WorkspaceFixture(object):
 
         # Create a workspace from the GDB.
         self.fc_path = os.path.join(self.gdb_path, self.FEATURE_CLASS_NAME)
+        self.rc_path = os.path.join(self.gdb_path, self.RELATED_CLASS_NAME)
         self.workspace = Workspace(self.gdb_path)
 
         # Create a feature matching the workspace.
