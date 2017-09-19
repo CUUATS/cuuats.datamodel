@@ -22,6 +22,12 @@ def tearDownModule():
     WorkspaceFixture.tearDownModule()
 
 
+def hasLicense(*licenses):
+    """Is the required license in use?"""
+
+    return arcpy.ProductInfo() in licenses
+
+
 class WorkspaceFixture(object):
 
     GDB_NAME = 'test.gdb'
@@ -674,6 +680,27 @@ class TestDescription(unittest.TestCase):
 
     def test_other_equality(self):
         self.assertNotEqual(D('Test'), 'Test')
+
+
+@unittest.skipUnless(hasLicense('ArcInfo', 'ArcEditor'),
+                     'required ArcGIS license is not in use')
+class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
+
+    REL_NAME = 'Widget_Warehouse'
+    ORIGIN_PK = 'OBJECTID'
+    ORIGIN_FK = 'WidgetID'
+    DESTINATION_PK = 'OBJECTID'
+    DESTINATION_FK = 'WarehouseID'
+
+    def setUp(self):
+        super(TestManyToManyField, self).setUp()
+
+        # Create the relationship class.
+        self.rel_path = os.path.join(self.gdb_path, self.REL_NAME)
+        arcpy.CreateRelationshipClass_management(
+            self.fc_path, self.rc_path, self.rel_path, 'SIMPLE', 'Warehouse',
+            'Widget', 'NONE', 'MANY_TO_MANY', 'NONE', self.ORIGIN_PK,
+            self.ORIGIN_FK, self.DESTINATION_PK, self.DESTINATION_FK)
 
 
 if __name__ == '__main__':
