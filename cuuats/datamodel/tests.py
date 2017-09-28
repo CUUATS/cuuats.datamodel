@@ -8,10 +8,12 @@ from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
 from cuuats.datamodel.workspaces import Workspace
 from cuuats.datamodel.fields import BaseField, OIDField, GeometryField, \
     StringField, NumericField, ScaleField, MethodField, WeightsField
+from cuuats.datamodel.manytomany import ManyToManyField
 from cuuats.datamodel.features import BaseFeature
 from cuuats.datamodel.scales import BreaksScale, DictScale
 from cuuats.datamodel.domains import CodedValue, D
 from cuuats.datamodel.workspaces import WorkspaceManager
+
 
 
 def setUpModule():
@@ -24,7 +26,6 @@ def tearDownModule():
 
 def hasLicense(*licenses):
     """Is the required license in use?"""
-
     return arcpy.ProductInfo() in licenses
 
 
@@ -133,6 +134,8 @@ class WorkspaceFixture(object):
         cls.populateFeatureClass(
             rc_path, cls.RELATED_CLASS_FIELDS, cls.RELATED_CLASS_DATA)
 
+
+
     @classmethod
     def tearDownModule(cls):
         shutil.rmtree(cls.workspace_dir)
@@ -174,6 +177,7 @@ class WorkspaceFixture(object):
                 return self.widget_available == D('Yes')
 
         self.cls = Widget
+
 
     def tearDown(self):
         if self.cls.workspace is not None:
@@ -684,23 +688,103 @@ class TestDescription(unittest.TestCase):
 
 @unittest.skipUnless(hasLicense('ArcInfo', 'ArcEditor'),
                      'required ArcGIS license is not in use')
-class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
 
+class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
     REL_NAME = 'Widget_Warehouse'
     ORIGIN_PK = 'OBJECTID'
     ORIGIN_FK = 'WidgetID'
     DESTINATION_PK = 'OBJECTID'
     DESTINATION_FK = 'WarehouseID'
 
+
     def setUp(self):
         super(TestManyToManyField, self).setUp()
-
-        # Create the relationship class.
         self.rel_path = os.path.join(self.gdb_path, self.REL_NAME)
+        # Create the relationship class.
         arcpy.CreateRelationshipClass_management(
-            self.fc_path, self.rc_path, self.rel_path, 'SIMPLE', 'Warehouse',
-            'Widget', 'NONE', 'MANY_TO_MANY', 'NONE', self.ORIGIN_PK,
-            self.ORIGIN_FK, self.DESTINATION_PK, self.DESTINATION_FK)
+            origin_table = self.fc_path,
+            destination_table = self.rc_path,
+            out_relationship_class = self.rel_path,
+            relationship_type = 'SIMPLE',
+            forward_label = 'Warehouse',
+            backward_label = 'Widget',
+            message_direction = 'NONE',
+            cardinality = 'MANY_TO_MANY',
+            attributed = 'NONE',
+            origin_primary_key = self.ORIGIN_PK,
+            origin_foreign_key = self.ORIGIN_FK,
+            destination_primary_key = self.DESTINATION_PK,
+            destination_foreign_key = self.DESTINATION_FK)
+
+        # Insert data into the relationship class
+        self.rel_fields = ["RID", self.ORIGIN_FK, self.DESTINATION_FK]
+        data = [(1, 1, 1),
+                (2, 1, 2),
+                (3, 2, 1),
+                (4, 2, 2),
+                (5, 3, 1)]
+        with arcpy.da.InsertCursor(self.rel_path, self.rel_fields) as cursor:
+            for row in data:
+                cursor.insertRow(row)
+        del cursor
+
+    # Create a Warehouse Python class
+        class Warehouse(BaseFeature):
+            """
+            Test feature class.
+            """
+
+            OBJECTID = OIDField('OID')
+            warehouse_name = StringField('Warehouse Name', required=True)
+            warehouse_address = StringField('Warehouse Address')
+            warehouse_zipcode = NumericField('Warehouse Zipcode', required=True)
+            warehouse_open = NumericField('Is Warehouse Open?',
+                                            required=True)
+            Shape = GeometryField('Shape')
+
+        self.related_cls = self.cls
+        self.cls = Warehouse
+
+    # def test_data_populated(self):
+    #     with arcpy.da.SearchCursor(self.rel_path, self.rel_fields) as cursor:
+    #         test_list = [row[0] for row in cursor]
+    #     self.assertTrue(len(test_list) == 5)
+    #
+    #     with arcpy.da.SearchCursor(self.rc_path, "warehouse_name") as cursor:
+    #         test_list = [row[0] for row in cursor]
+    #     self.assertEqual(test_list, ['Widget Distribution Center',
+    #                                     'Widgets International'])
+
+
+    def test_add_many_to_many_field(self):
+        self.cls.widgets = ManyToManyField("Widgets",
+                                        related_class = self.related_cls,
+                                        relationship_class = self.REL_NAME,
+                                        foreign_key = self.DESTINATION_FK,
+                                        related_foreign_key = self.ORIGIN_FK,
+                                        primary_key = self.DESTINATION_PK,
+                                        related_primary_key = self.ORIGIN_PK)
+
+        self.cls.register(self.rc_path)
+        print(self.gdb_path)
+        # self.related_cls.register(self.fc_path)
+
+    def tearDown(self):
+        del self.cls.related_classes[self.REL_NAME]
+
+
+        del self.related_cls.related_classes[self.REL_NAME]
+        del self.cls.related_classes[self.REL_NAME]
+        del self.related_cls
+        super(TestManyToManyField, self).tearDown()
+
+    # def test_get_data(self):
+    #     self.assertTrue(self.cls.widgets)
+    #
+    #
+    # def test_set_data(self):
+    #     pass
+
 
 
 if __name__ == '__main__':

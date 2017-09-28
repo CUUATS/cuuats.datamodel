@@ -59,6 +59,9 @@ class Workspace(object):
         """
 
         layer = arcpy.Describe(os.path.join(self.path, layer_name))
+        if not hasattr(layer, "relationshipClassNames"):
+            return([])
+
         return [self.get_relationship_info(rc_name)
                 for rc_name in layer.relationshipClassNames]
 

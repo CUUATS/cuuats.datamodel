@@ -6,6 +6,8 @@ from cuuats.datamodel.scales import BaseScale, ScaleLevel
 from cuuats.datamodel.query import RelatedManager
 
 
+
+
 class BaseField(object):
 
     creation_index = 0
@@ -32,6 +34,7 @@ class BaseField(object):
 
     def __get__(self, instance, owner):
         # Retrieve deferred values if necessary.
+
         if isinstance(instance.values.get(self.name, None), DeferredValue):
             instance.get_deferred_values()
 
@@ -435,7 +438,6 @@ class ScaleField(CalculatedField):
 
 
 class ForeignKey(BaseField):
-
     default_storage = {
         'field_type': 'SHORT',
     }
@@ -447,6 +449,7 @@ class ForeignKey(BaseField):
         self.origin_class = kwargs.get('origin_class', None)
         self.primary_key = kwargs.get('primary_key', None)
         self.related_name = kwargs.get('related_name', None)
+        self.related_manager = kwargs.get('related_manager', True)
 
     def register(self, workspace, feature_class, field_name, layer_name,
                  layer_fields):
@@ -463,9 +466,10 @@ class ForeignKey(BaseField):
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
 
-        setattr(self.origin_class, self.related_name,
-                RelatedManager(self.related_name, feature_class,
-                               self.name, self.primary_key))
+        if self.related_manager:
+            setattr(self.origin_class, self.related_name,
+                    RelatedManager(self.related_name, feature_class,
+                                   self.name, self.primary_key))
 
         self._set_related(feature_class)
 
