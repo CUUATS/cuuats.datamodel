@@ -1,4 +1,5 @@
 import arcpy
+import gc
 import os
 import shutil
 import tempfile
@@ -180,11 +181,10 @@ class WorkspaceFixture(object):
 
 
     def tearDown(self):
-        if self.cls.workspace is not None:
-            del self.cls.workspace
         del self.cls
         del self.workspace
         WorkspaceManager().clear()
+        gc.collect()
         shutil.rmtree(self.gdb_path)
 
 
@@ -766,15 +766,9 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
                                         related_primary_key = self.ORIGIN_PK)
 
         self.cls.register(self.rc_path)
-        print(self.gdb_path)
-        # self.related_cls.register(self.fc_path)
+        self.related_cls.register(self.fc_path)
 
     def tearDown(self):
-        del self.cls.related_classes[self.REL_NAME]
-
-
-        del self.related_cls.related_classes[self.REL_NAME]
-        del self.cls.related_classes[self.REL_NAME]
         del self.related_cls
         super(TestManyToManyField, self).tearDown()
 
