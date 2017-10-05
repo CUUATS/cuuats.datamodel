@@ -686,9 +686,11 @@ class TestDescription(unittest.TestCase):
         self.assertNotEqual(D('Test'), 'Test')
 
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 @unittest.skipUnless(hasLicense('ArcInfo', 'ArcEditor'),
                      'required ArcGIS license is not in use')
-
 class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
     REL_NAME = 'Widget_Warehouse'
     ORIGIN_PK = 'OBJECTID'
@@ -745,18 +747,6 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
         self.related_cls = self.cls
         self.cls = Warehouse
 
-    # def test_data_populated(self):
-    #     with arcpy.da.SearchCursor(self.rel_path, self.rel_fields) as cursor:
-    #         test_list = [row[0] for row in cursor]
-    #     self.assertTrue(len(test_list) == 5)
-    #
-    #     with arcpy.da.SearchCursor(self.rc_path, "warehouse_name") as cursor:
-    #         test_list = [row[0] for row in cursor]
-    #     self.assertEqual(test_list, ['Widget Distribution Center',
-    #                                     'Widgets International'])
-
-
-    def test_add_many_to_many_field(self):
         self.cls.widgets = ManyToManyField("Widgets",
                                         related_class = self.related_cls,
                                         relationship_class = self.REL_NAME,
@@ -768,16 +758,43 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
         self.cls.register(self.rc_path)
         self.related_cls.register(self.fc_path)
 
+    def test_data_populated(self):
+        with arcpy.da.SearchCursor(self.rel_path, self.rel_fields) as cursor:
+            test_list = [row[0] for row in cursor]
+        self.assertTrue(len(test_list) == 5)
+
+        with arcpy.da.SearchCursor(self.rc_path, "warehouse_name") as cursor:
+            test_list = [row[0] for row in cursor]
+        self.assertEqual(test_list, ['Widget Distribution Center',
+                                        'Widgets International'])
+
+
+    def test_add_many_to_many_field(self):
+        self.assertTrue(isinstance(self.cls.widgets, ManyToManyField))
+
+
+
+    def test_get_data(self):
+        warehouses = [x for x in self.cls.objects.all()]
+        warehouse = warehouses[0]
+        warehouse.widgets
+
+
+
+
+
+
+
+    #
+    # def test_set_data(self):
+    #     pass
+
+
     def tearDown(self):
         del self.related_cls
         super(TestManyToManyField, self).tearDown()
 
-    # def test_get_data(self):
-    #     self.assertTrue(self.cls.widgets)
-    #
-    #
-    # def test_set_data(self):
-    #     pass
+
 
 
 

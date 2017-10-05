@@ -1,18 +1,18 @@
-from cuuats.datamodel.features import BaseFeature
+from cuuats.datamodel.features import BaseFeature, VirtualField
 from cuuats.datamodel.fields import BaseField, ForeignKey
 import inspect
 import os
 
 
 
-
-class ManyToManyField(BaseField):
-
-    def __init__(self, name, **kwargs):
+class ManyToManyField(VirtualField):
+    def __init__(self, label, **kwargs):
         # Initiate ManyToManyField from Parent BaseField
-        super(ManyToManyField, self).__init__(name, **kwargs)
+        super(ManyToManyField, self).__init__()
 
         # Set variables
+        self.label = label
+        self.name = kwargs.get('name', None)
         self.related_class = kwargs.get("related_class", None)
         self.related_name = kwargs.get("related_name", None)
         self.relationship_class = kwargs.get("relationship_class", None)
@@ -22,14 +22,12 @@ class ManyToManyField(BaseField):
         self.related_primary_key = kwargs.get("related_primary_key", None)
 
 
-    def register(self, workspace, feature_class, field_name, layer_name,
-                 layer_fields):
+    def register(self, workspace, feature_class, field_name):
         """
         Register the ManyToManyField with the workspace
         """
         # register the field
-        super(ManyToManyField, self).register(
-            workspace, feature_class, field_name, layer_name, layer_fields)
+
 
         # create a new name for the method
         if self.related_name is None:
@@ -59,12 +57,10 @@ class ManyToManyField(BaseField):
 
 
         foreign_key = ForeignKey("Foreign Key", origin_class = feature_class,
-                                    primary_key = self.primary_key,
-                                    related_manager = False)
+                                    primary_key = self.primary_key)
         related_foreign_key = ForeignKey("Related Foreign Key",
                                     origin_class = self.related_class,
-                                    primary_key = self.related_primary_key,
-                                    related_manager = False)
+                                    primary_key = self.related_primary_key)
 
         setattr(RelationshipFeature, self.foreign_key, foreign_key)
         setattr(RelationshipFeature, self.related_foreign_key, related_foreign_key)
@@ -99,6 +95,9 @@ class ManyToManyField(BaseField):
         """
         Grab the data from the related tables
         """
+        if not instance:
+            return(self)
+
         value = super(ManyToManyField, self).__get__(instance, owner)
         if value is None:
             return None

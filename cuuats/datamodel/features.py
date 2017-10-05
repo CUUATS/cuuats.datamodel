@@ -7,6 +7,7 @@ from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.query import Q, Manager, SQLCompiler
 from cuuats.datamodel.workspaces import WorkspaceManager
 
+
 IDENTIFIER_RE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*')
 
 
@@ -119,6 +120,14 @@ class BaseFeature(object):
         for (field_name, field) in cls.fields.items():
             field.register(
                 cls.workspace, cls, field_name, cls.name, layer_fields)
+
+        # Register virtual fields in this class
+        for subcls in type.mro(cls):
+            for (name, member) in subcls.__dict__.items():
+                if isinstance(member, VirtualField):
+                    member.register(cls.workspace, cls, name)
+
+
 
     @classmethod
     @require_registration
@@ -425,3 +434,14 @@ def attachment_class_factory(
            'Feature', related_name)
 
     return Attachment
+
+
+class VirtualField(object):
+    """
+    Field that does not exisit in the database
+    """
+    def register(self, workspace, feature_class, field_name):
+        """
+        Register the ManyToManyField with the workspace
+        """
+        pass
