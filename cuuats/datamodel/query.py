@@ -401,6 +401,23 @@ class QuerySet(object):
             feature._prefetch_cache[rel_name] = origin_map.get(
                 feature.values.get(rel_name), None)
 
+    def _prefetch_many_to_many(self, rel_name, rel):
+        # rel is a ManyToManyField.
+        # - Query rel's relationship class to get instances where the
+        #   the foreign key is in the primary keys from this QuerySet's cache.
+        # - Create a unique set of related foreign keys from the instances
+        #   of the relationship class.
+        # - Query rel's related class to get instances where the primary key is
+        #   in the set of related foreign keys.
+        # - Create a dictionary mapping foreign key to related foreign key for
+        #   the instances of the relationship class.
+        # - Iterate over the objects in this QuerySet's cache, and populate
+        #   their prefectch caches by using the dictionary to find the related
+        #   class instances that are related to the object.
+
+        raise NotImplementedError(
+            'Prefetch for ManyToManyField is not implemented')
+
     def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())
         clone._field_name_cache = self._field_name_cache
