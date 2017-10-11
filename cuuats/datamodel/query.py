@@ -4,6 +4,7 @@ from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.domains import D
+from collections import defaultdict
 
 
 class SQLCondition(object):
@@ -365,6 +366,8 @@ class QuerySet(object):
                 self._prefetch_related_manager(rel_name, rel)
             elif rel.__class__.__name__ == 'ForeignKey':
                 self._prefetch_foreign_key(rel_name, rel)
+            elif rel.__class__.__name__ == 'ManyToManyField':
+                self._prefetch_many_to_many(rel_name, rel)
             else:
                 raise AttributeError(
                     'Relationship %s does not exist.' % (rel_name,))
@@ -402,21 +405,48 @@ class QuerySet(object):
                 feature.values.get(rel_name), None)
 
     def _prefetch_many_to_many(self, rel_name, rel):
+
         # rel is a ManyToManyField.
         # - Query rel's relationship class to get instances where the
         #   the foreign key is in the primary keys from this QuerySet's cache.
+        pk_filter = "%s__in" % (rel.foreign_key,)
+        pks = [getattr(f, rel.primary_key) for f in self._cache]
+        import pdb; pdb.set_trace()
+        relationship_class_features = \
+            rel.relationship_class.objects.filter({pk_filter: pks})
+
         # - Create a unique set of related foreign keys from the instances
         #   of the relationship class.
         # - Query rel's related class to get instances where the primary key is
         #   in the set of related foreign keys.
+        pk_filter = "%s__in" % (rel.related_primary_key,)
+        pks = [getattr(f, rel.related_foreign_key) for f in
+               relationship_class_features]
+        related_class_features =\
+            rel.related_class.objects.filter({pk_filter: pks})
+
+
         # - Create a dictionary mapping foreign key to related foreign key for
         #   the instances of the relationship class.
+        relationship_class_dict = defaultdict(list)
+        for fc in relationship_class_features:
+            relationship_class_dict[getattr(fc, rel.foreign_key)].append(
+            getattr(fc, rel.related_foreign_key)
+            )
+
+        related_class_dict = dict([(getattr(rc, rel.related_primary_key), rc)
+                                   for rc in related_class_features])
+
         # - Iterate over the objects in this QuerySet's cache, and populate
         #   their prefectch caches by using the dictionary to find the related
         #   class instances that are related to the object.
+        for feature in self._cache:
+            related_class_pks = relationship_class_dict.get(
+                getattr(feature, rel.primary_key)
+            )
+            feature._prefetch_cache[rel_name] = [related_class_dict.get(pk) for
+            pk in related_class_pks]
 
-        raise NotImplementedError(
-            'Prefetch for ManyToManyField is not implemented')
 
     def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())

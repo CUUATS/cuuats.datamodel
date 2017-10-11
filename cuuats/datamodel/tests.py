@@ -720,13 +720,13 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
 
         # Insert data into the relationship class
         self.rel_fields = ["RID", self.ORIGIN_FK, self.DESTINATION_FK]
-        data = [(1, 1, 1),
-                (2, 1, 2),
-                (3, 2, 1),
-                (4, 2, 2),
-                (5, 3, 1)]
+        self.data = [(1, 1, 1),
+                     (2, 1, 2),
+                     (3, 2, 1),
+                     (4, 2, 2),
+                     (5, 3, 1)]
         with arcpy.da.InsertCursor(self.rel_path, self.rel_fields) as cursor:
-            for row in data:
+            for row in self.data:
                 cursor.insertRow(row)
         del cursor
 
@@ -753,10 +753,12 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
                                         foreign_key = self.DESTINATION_FK,
                                         related_foreign_key = self.ORIGIN_FK,
                                         primary_key = self.DESTINATION_PK,
-                                        related_primary_key = self.ORIGIN_PK)
+                                        related_primary_key = self.ORIGIN_PK,
+                                        self_class = self.cls)
 
         self.cls.register(self.rc_path)
         self.related_cls.register(self.fc_path)
+
 
     def test_data_populated(self):
         with arcpy.da.SearchCursor(self.rel_path, self.rel_fields) as cursor:
@@ -775,27 +777,41 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
 
 
     def test_get_data(self):
-        warehouses = [x for x in self.cls.objects.all()]
-        warehouse = warehouses[0]
-        warehouse.widgets
+        warehouses = [i for i in self.cls.objects.all()]
+        widgets = [i for i in self.related_cls.objects.all()]
 
+        # Testing the len of the data
+        self.assertEqual(
+            len(warehouses),
+            len(super(TestManyToManyField, self).RELATED_CLASS_DATA)
+        )
+        self.assertEqual(
+            len(widgets),
+            len(super(TestManyToManyField, self).FEATURE_CLASS_DATA)
+        )
 
+        # Test getting correct widgets from warehouse
+        testID = 2
+        warehouse = self.cls.objects.get(OBJECTID=testID)
+        widgetsID = [wid.OBJECTID for wid in warehouse.widgets]
+        testWidgets = [d[1] for d in self.data if d[2] == testID]
+        self.assertEqual(widgetsID, testWidgets)
 
+        # Test getting correct warehouses from widget
+        widget = self.related_cls.objects.get(OBJECTID=testID)
+        warehousesID = [ware.OBJECTID for ware in widget.warehouse_set]
+        testWarehouses = [w[2] for w in self.data if w[1] == testID]
+        self.assertEqual(warehousesID, testWarehouses)
 
+        # Test warehouses prefetch widgets
+        warehouses_prefetch = [i for i in self.cls.objects.filter(
+            OBJECTID=testID).prefetch_related("widgets")]
 
-
-
-    #
-    # def test_set_data(self):
-    #     pass
 
 
     def tearDown(self):
         del self.related_cls
         super(TestManyToManyField, self).tearDown()
-
-
-
 
 
 if __name__ == '__main__':

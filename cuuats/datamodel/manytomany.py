@@ -4,7 +4,6 @@ import inspect
 import os
 
 
-
 class ManyToManyField(VirtualField):
     def __init__(self, label, **kwargs):
         # Initiate ManyToManyField from Parent BaseField
@@ -20,28 +19,31 @@ class ManyToManyField(VirtualField):
         self.related_foreign_key = kwargs.get("related_foreign_key", None)
         self.primary_key = kwargs.get("primary_key", None)
         self.related_primary_key = kwargs.get("related_primary_key", None)
-
+        self.cls = kwargs.get("self_class", None)
 
     def register(self, workspace, feature_class, field_name):
         """
         Register the ManyToManyField with the workspace
         """
         # register the field
-
-
         # create a new name for the method
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
 
-        if isinstance(self.relationship_class, basestring): # Base feature?
+
+        if isinstance(self.relationship_class, basestring):
             self.relationship_class = self._create_relationship_class(
                                             self.relationship_class, workspace,
                                             feature_class)
 
         self.relationship_class.register(os.path.join(workspace.path,
                                         self.relationship_class.__name__))
-        # self._set_related(feature_class)
 
+        self._set_reverse_relationship()
+
+
+
+        # self._set_related(feature_class)
 
     def _create_relationship_class(self, relationship_class_name, workspace,
                                     feature_class):
@@ -63,19 +65,16 @@ class ManyToManyField(VirtualField):
                                     primary_key = self.related_primary_key)
 
         setattr(RelationshipFeature, self.foreign_key, foreign_key)
-        setattr(RelationshipFeature, self.related_foreign_key, related_foreign_key)
+        setattr(RelationshipFeature,
+                self.related_foreign_key,
+                related_foreign_key)
 
         return(RelationshipFeature)
-
-
 
 
     def _set_related(self, feature_class):
         """
         Set references to related feature classes.
-
-        Q: Does that mean I have a set relationship between origin_class,
-        relationship_class, and destination_class?
         """
         for fc in (self.related_class, feature_class):
             if fc.related_classes is None:
@@ -83,12 +82,26 @@ class ManyToManyField(VirtualField):
 
         # set related class for origin to relationship, relationship to
         # destination
+
         self.related_class.related_classes[self.relationship_class.__name__] = \
             self.relationship_class
         feature_class.related_classes[self.relationship_class.__name__] = \
             self.relationship_class
 
 
+    def _set_reverse_relationship(self):
+        # create a many to many field and assign it to the related class
+        setattr(self.related_class, self.related_name,
+                ManyToManyField(
+                    self.related_name,
+                    related_class = self.cls,
+                    relationship_class = self.relationship_class,
+                    foreign_key = self.related_foreign_key,
+                    related_foreign_key = self.foreign_key,
+                    primary_key = self.related_primary_key,
+                    related_primary_key = self.primary_key
+                    )
+                )
 
 
     def __get__(self, instance, owner):
@@ -98,15 +111,15 @@ class ManyToManyField(VirtualField):
         if not instance:
             return(self)
 
-        value = super(ManyToManyField, self).__get__(instance, owner)
-        if value is None:
-            return None
+        fk_related_name = self.relationship_class.fields.get(
+                    self.related_foreign_key).related_name
 
-        return(self.related_class.objects.get({
-                "__".join([self.related_name, self.foreign_key]):
+        return(self.related_class.objects.filter({
+                "__".join([fk_related_name, self.foreign_key]):
                 getattr(instance, self.primary_key)
             })
         )
+
         # Return the prefetched feature if there is one.
         # prefetched_feature = instance._prefetch_cache.get(self.name, None)
         # if prefetched_feature:
@@ -120,4 +133,4 @@ class ManyToManyField(VirtualField):
 
 
     def __set__():
-        pass
+        raise NotImplementedError
