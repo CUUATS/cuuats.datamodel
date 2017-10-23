@@ -19,7 +19,7 @@ class ManyToManyField(VirtualField):
         self.related_foreign_key = kwargs.get("related_foreign_key", None)
         self.primary_key = kwargs.get("primary_key", None)
         self.related_primary_key = kwargs.get("related_primary_key", None)
-        self.cls = kwargs.get("self_class", None)
+
 
     def register(self, workspace, feature_class, field_name):
         """
@@ -39,7 +39,7 @@ class ManyToManyField(VirtualField):
         self.relationship_class.register(os.path.join(workspace.path,
                                         self.relationship_class.__name__))
 
-        self._set_reverse_relationship()
+        self._set_reverse_relationship(feature_class)
 
 
 
@@ -89,12 +89,12 @@ class ManyToManyField(VirtualField):
             self.relationship_class
 
 
-    def _set_reverse_relationship(self):
+    def _set_reverse_relationship(self, feature_class):
         # create a many to many field and assign it to the related class
         setattr(self.related_class, self.related_name,
                 ManyToManyField(
                     self.related_name,
-                    related_class = self.cls,
+                    related_class = feature_class,
                     relationship_class = self.relationship_class,
                     foreign_key = self.related_foreign_key,
                     related_foreign_key = self.foreign_key,
