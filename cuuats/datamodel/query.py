@@ -344,7 +344,9 @@ class QuerySet(object):
         compiler = SQLCompiler(feature_class)
         query = Query(fields, compiler)
         oid_field = feature_class.fields.oid_field
-        query.set_order([(oid_field.db_name, 'ASC')])
+        if oid_field:
+            query.set_order([(oid_field.db_name, 'ASC')])
+
         return query
 
     def _make_q(self, *args, **kwargs):
@@ -405,22 +407,19 @@ class QuerySet(object):
                 feature.values.get(rel_name), None)
 
     def _prefetch_many_to_many(self, rel_name, rel):
-
         # rel is a ManyToManyField.
         # - Query rel's relationship class to get instances where the
         #   the foreign key is in the primary keys from this QuerySet's cache.
         pk_filter = "%s__in" % (rel.foreign_key,)
         pks = [getattr(f, rel.primary_key) for f in self._cache]
-        import pdb; pdb.set_trace()
-        relationship_class_features = \
-            rel.relationship_class.objects.filter({pk_filter: pks})
+        relationship_class_features = rel.relationship_class.objects.filter({pk_filter: pks})
 
         # - Create a unique set of related foreign keys from the instances
         #   of the relationship class.
         # - Query rel's related class to get instances where the primary key is
         #   in the set of related foreign keys.
         pk_filter = "%s__in" % (rel.related_primary_key,)
-        pks = [getattr(f, rel.related_foreign_key) for f in
+        pks = [f.values.get(rel.related_foreign_key) for f in
                relationship_class_features]
         related_class_features =\
             rel.related_class.objects.filter({pk_filter: pks})
@@ -430,8 +429,8 @@ class QuerySet(object):
         #   the instances of the relationship class.
         relationship_class_dict = defaultdict(list)
         for fc in relationship_class_features:
-            relationship_class_dict[getattr(fc, rel.foreign_key)].append(
-            getattr(fc, rel.related_foreign_key)
+            relationship_class_dict[fc.values.get(rel.foreign_key)].append(
+            fc.values.get(rel.related_foreign_key)
             )
 
         related_class_dict = dict([(getattr(rc, rel.related_primary_key), rc)
