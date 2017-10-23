@@ -746,16 +746,14 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
 
         self.related_cls = self.cls
         self.cls = Warehouse
-
         self.cls.widgets = ManyToManyField("Widgets",
                                         related_class = self.related_cls,
                                         relationship_class = self.REL_NAME,
                                         foreign_key = self.DESTINATION_FK,
                                         related_foreign_key = self.ORIGIN_FK,
                                         primary_key = self.DESTINATION_PK,
-                                        related_primary_key = self.ORIGIN_PK,
-                                        self_class = self.cls)
-
+                                        related_primary_key = self.ORIGIN_PK
+                                        )
         self.cls.register(self.rc_path)
         self.related_cls.register(self.fc_path)
 
@@ -803,10 +801,21 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
         testWarehouses = [w[2] for w in self.data if w[1] == testID]
         self.assertEqual(warehousesID, testWarehouses)
 
-        # Test warehouses prefetch widgets
-        warehouses_prefetch = [i for i in self.cls.objects.filter(
-            OBJECTID=testID).prefetch_related("widgets")]
 
+    def test_prefetch_data(self):
+        testID = 2
+        # Test warehouses prefetch widgets
+        warehouses = self.cls.objects.prefetch_related(
+                     "widgets").get(OBJECTID=testID)
+        widgetsID = [wid.OBJECTID for wid in warehouses.widgets]
+        testWidgets = [d[1] for d in self.data if d[2] == testID]
+        self.assertEqual(widgetsID, testWidgets)
+
+        widgets = self.related_cls.objects.prefetch_related(
+                  "warehouse_set").get(OBJECTID=testID)
+        warehousesID = [ware.OBJECTID for ware in widgets.warehouse_set]
+        testWarehouses = [w[2] for w in self.data if w[1] == testID]
+        self.assertEqual(warehousesID, testWarehouses)
 
 
     def tearDown(self):
