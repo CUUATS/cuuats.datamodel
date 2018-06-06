@@ -1,5 +1,5 @@
 from cuuats.datamodel.features import BaseFeature, VirtualField
-from cuuats.datamodel.fields import BaseField, ForeignKey
+from cuuats.datamodel.fields import ForeignKey
 import inspect
 import os
 
@@ -20,7 +20,6 @@ class ManyToManyField(VirtualField):
         self.primary_key = kwargs.get("primary_key", None)
         self.related_primary_key = kwargs.get("related_primary_key", None)
 
-
     def register(self, workspace, feature_class, field_name):
         """
         Register the ManyToManyField with the workspace
@@ -30,23 +29,18 @@ class ManyToManyField(VirtualField):
         if self.related_name is None:
             self.related_name = feature_class.__name__.lower() + '_set'
 
-
         if isinstance(self.relationship_class, basestring):
             self.relationship_class = self._create_relationship_class(
                                             self.relationship_class, workspace,
                                             feature_class)
 
         self.relationship_class.register(os.path.join(workspace.path,
-                                        self.relationship_class.__name__))
+                                         self.relationship_class.__name__))
 
         self._set_reverse_relationship(feature_class)
 
-
-
-        # self._set_related(feature_class)
-
     def _create_relationship_class(self, relationship_class_name, workspace,
-                                    feature_class):
+                                   feature_class):
         class RelationshipFeature(BaseFeature):
             pass
 
@@ -57,12 +51,11 @@ class ManyToManyField(VirtualField):
         frame = inspect.stack()[1]
         RelationshipFeature.__module__ = inspect.getmodule(frame[0])
 
-
-        foreign_key = ForeignKey("Foreign Key", origin_class = feature_class,
-                                    primary_key = self.primary_key)
+        foreign_key = ForeignKey("Foreign Key", origin_class=feature_class,
+                                 primary_key=self.primary_key)
         related_foreign_key = ForeignKey("Related Foreign Key",
-                                    origin_class = self.related_class,
-                                    primary_key = self.related_primary_key)
+                                         origin_class=self.related_class,
+                                         primary_key=self.related_primary_key)
 
         setattr(RelationshipFeature, self.foreign_key, foreign_key)
         setattr(RelationshipFeature,
@@ -70,7 +63,6 @@ class ManyToManyField(VirtualField):
                 related_foreign_key)
 
         return(RelationshipFeature)
-
 
     def _set_related(self, feature_class):
         """
@@ -83,26 +75,24 @@ class ManyToManyField(VirtualField):
         # set related class for origin to relationship, relationship to
         # destination
 
-        self.related_class.related_classes[self.relationship_class.__name__] = \
-            self.relationship_class
-        feature_class.related_classes[self.relationship_class.__name__] = \
-            self.relationship_class
-
+        self.related_class.related_classes[
+            self.relationship_class.__name__] = self.relationship_class
+        feature_class.related_classes[
+            self.relationship_class.__name__] = self.relationship_class
 
     def _set_reverse_relationship(self, feature_class):
         # create a many to many field and assign it to the related class
         setattr(self.related_class, self.related_name,
                 ManyToManyField(
                     self.related_name,
-                    related_class = feature_class,
-                    relationship_class = self.relationship_class,
-                    foreign_key = self.related_foreign_key,
-                    related_foreign_key = self.foreign_key,
-                    primary_key = self.related_primary_key,
-                    related_primary_key = self.primary_key
+                    related_class=feature_class,
+                    relationship_class=self.relationship_class,
+                    foreign_key=self.related_foreign_key,
+                    related_foreign_key=self.foreign_key,
+                    primary_key=self.related_primary_key,
+                    related_primary_key=self.primary_key
                     )
                 )
-
 
     def __get__(self, instance, owner):
         """
@@ -119,18 +109,6 @@ class ManyToManyField(VirtualField):
                 getattr(instance, self.primary_key)
             })
         )
-
-        # Return the prefetched feature if there is one.
-        # prefetched_feature = instance._prefetch_cache.get(self.name, None)
-        # if prefetched_feature:
-        #     return prefetched_feature
-
-        # # Otherwise, get the related feature from the database.
-        # return(self.related.objects.get({
-        #     relationship_class.objects.get(instance, self.primary_key) : value
-        #     })
-        #     )
-
 
     def __set__():
         raise NotImplementedError

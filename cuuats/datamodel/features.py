@@ -127,8 +127,6 @@ class BaseFeature(object):
                 if isinstance(member, VirtualField):
                     member.register(cls.workspace, cls, name)
 
-
-
     @classmethod
     @require_registration
     def count(cls, where_clause=None):

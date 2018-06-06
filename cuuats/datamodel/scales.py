@@ -37,7 +37,8 @@ class BaseScale(object):
 
     def get_level(self, value):
         """
-        Retuns a ScaleLevel object or a number corresponding to the input value.
+        Retuns a ScaleLevel object or a number corresponding to the
+        input value.
         """
 
         raise NotImplemented
@@ -70,7 +71,8 @@ class StaticScale(BaseScale):
 
     def get_level(self, value):
         """
-        Retuns a ScaleLevel object or a number corresponding to the input value.
+        Retuns a ScaleLevel object or a number corresponding to the
+        input value.
         """
 
         return self.level
@@ -102,7 +104,8 @@ class BreaksScale(BaseScale):
 
     def get_level(self, value):
         """
-        Retuns a ScaleLevel object or a number corresponding to the input value.
+        Retuns a ScaleLevel object or a number corresponding to the
+        input value.
         """
 
         breaks = self.breaks + [float('Inf')]
@@ -129,7 +132,8 @@ class DictScale(BaseScale):
 
     def get_level(self, value):
         """
-        Retuns a ScaleLevel object or a number corresponding to the input value.
+        Retuns a ScaleLevel object or a number corresponding to the
+        input value.
         """
 
         if value in self.levels:

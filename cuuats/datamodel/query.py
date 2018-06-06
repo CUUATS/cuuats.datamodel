@@ -4,7 +4,6 @@ from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.domains import D
-from collections import defaultdict
 
 
 class SQLCondition(object):
@@ -412,7 +411,8 @@ class QuerySet(object):
         #   the foreign key is in the primary keys from this QuerySet's cache.
         pk_filter = "%s__in" % (rel.foreign_key,)
         pks = [getattr(f, rel.primary_key) for f in self._cache]
-        relationship_class_features = rel.relationship_class.objects.filter({pk_filter: pks})
+        relationship_class_features = rel.relationship_class.objects.filter(
+            {pk_filter: pks})
 
         # - Create a unique set of related foreign keys from the instances
         #   of the relationship class.
@@ -424,14 +424,12 @@ class QuerySet(object):
         related_class_features =\
             rel.related_class.objects.filter({pk_filter: pks})
 
-
         # - Create a dictionary mapping foreign key to related foreign key for
         #   the instances of the relationship class.
         relationship_class_dict = defaultdict(list)
         for fc in relationship_class_features:
             relationship_class_dict[fc.values.get(rel.foreign_key)].append(
-            fc.values.get(rel.related_foreign_key)
-            )
+                fc.values.get(rel.related_foreign_key))
 
         related_class_dict = dict([(getattr(rc, rel.related_primary_key), rc)
                                    for rc in related_class_features])
@@ -443,9 +441,8 @@ class QuerySet(object):
             related_class_pks = relationship_class_dict.get(
                 getattr(feature, rel.primary_key)
             )
-            feature._prefetch_cache[rel_name] = [related_class_dict.get(pk) for
-            pk in related_class_pks]
-
+            feature._prefetch_cache[rel_name] = [
+                related_class_dict.get(pk) for pk in related_class_pks]
 
     def _clone(self, preserve_cache=False):
         clone = self.__class__(self.feature_class, self.query.clone())
@@ -564,7 +561,8 @@ class QuerySet(object):
             level_key = hash(level)
             results[level_key] = {}
             results[level_key].update(level.meta)
-            results[level_key].update(dict(zip(kwargs.keys(), [0]*len(kwargs))))
+            results[level_key].update(
+                dict(zip(kwargs.keys(), [0]*len(kwargs))))
             results[level_key]['count'] = 0
             results[level_key]['value'] = level.value
             results[level_key]['label'] = level.label

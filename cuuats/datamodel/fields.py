@@ -6,8 +6,6 @@ from cuuats.datamodel.scales import BaseScale, ScaleLevel
 from cuuats.datamodel.query import RelatedManager
 
 
-
-
 class BaseField(object):
 
     creation_index = 0
