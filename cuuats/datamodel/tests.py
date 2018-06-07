@@ -413,6 +413,10 @@ class TestFeature(WorkspaceFixture, unittest.TestCase):
             OBJECTID=1, widget_name='My Widget', widget_number=300,
             widget_available=50, Shape=None)
 
+    def tearDown(self):
+        del self.instance
+        super(TestFeature, self).tearDown()
+
     def test_get_fields(self):
         field_names = ['OBJECTID', 'widget_name', 'widget_description',
                        'widget_number', 'widget_available', 'widget_price',
