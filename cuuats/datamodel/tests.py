@@ -174,10 +174,27 @@ class WorkspaceFixture(object):
             def is_available(self):
                 return self.widget_available == D('Yes')
 
+        # Create a Warehouse Python class
+        class Warehouse(BaseFeature):
+            """
+            Test feature class.
+            """
+
+            OBJECTID = OIDField('OID')
+            warehouse_name = StringField('Warehouse Name', required=True)
+            warehouse_address = StringField('Warehouse Address')
+            warehouse_zipcode = NumericField('Warehouse Zipcode',
+                                             required=True)
+            warehouse_open = NumericField('Is Warehouse Open?',
+                                          required=True)
+            Shape = GeometryField('Shape')
+
         self.cls = Widget
+        self.related_cls = Warehouse
 
     def tearDown(self):
         del self.cls
+        del self.related_cls
         del self.workspace
         WorkspaceManager().clear()
         gc.collect()
@@ -726,23 +743,9 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
                 cursor.insertRow(row)
         del cursor
 
-    # Create a Warehouse Python class
-        class Warehouse(BaseFeature):
-            """
-            Test feature class.
-            """
-
-            OBJECTID = OIDField('OID')
-            warehouse_name = StringField('Warehouse Name', required=True)
-            warehouse_address = StringField('Warehouse Address')
-            warehouse_zipcode = NumericField('Warehouse Zipcode',
-                                             required=True)
-            warehouse_open = NumericField('Is Warehouse Open?',
-                                          required=True)
-            Shape = GeometryField('Shape')
-
+        warehouse = self.related_cls
         self.related_cls = self.cls
-        self.cls = Warehouse
+        self.cls = warehouse
         self.cls.widgets = ManyToManyField("Widgets",
                                            related_class=self.related_cls,
                                            relationship_class=self.REL_NAME,
@@ -807,10 +810,6 @@ class TestManyToManyField(WorkspaceFixture, unittest.TestCase):
         warehousesID = [ware.OBJECTID for ware in widgets.warehouse_set]
         testWarehouses = [w[2] for w in self.data if w[1] == testID]
         self.assertEqual(warehousesID, testWarehouses)
-
-    def tearDown(self):
-        del self.related_cls
-        super(TestManyToManyField, self).tearDown()
 
 
 if __name__ == '__main__':
