@@ -3,7 +3,7 @@
 from setuptools import find_packages
 from setuptools import setup
 
-version = '0.1.1'
+version = '0.2.0'
 
 setup(name='cuuats.datamodel',
       version=version,
@@ -25,7 +25,7 @@ setup(name='cuuats.datamodel',
       author='Matt Yoder',
       author_email='myoder@ccrpc.org',
       url='https://cuuats.org/',
-      download_url='https://github.com/CUUATS/cuuats.datamodel/tarball/0.1.1',
+      download_url='https://github.com/CUUATS/cuuats.datamodel/tarball/0.2.0',
       packages=find_packages(exclude=['ez_setup']),
       namespace_packages=['cuuats']
       )
