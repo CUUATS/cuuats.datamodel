@@ -9,10 +9,6 @@ def setUpModule():
     WorkspaceFixture.setUpModule()
 
 
-def tearDownModule():
-    WorkspaceFixture.tearDownModule()
-
-
 @unittest.skipUnless(hasLicense('ArcInfo', 'ArcEditor'),
                      'required ArcGIS license is not in use')
 class TestManyToManyField(WorkspaceFixture, unittest.TestCase):

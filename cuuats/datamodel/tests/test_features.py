@@ -9,10 +9,6 @@ def setUpModule():
     WorkspaceFixture.setUpModule()
 
 
-def tearDownModule():
-    WorkspaceFixture.tearDownModule()
-
-
 class TestFeature(WorkspaceFixture, unittest.TestCase):
 
     def setUp(self):

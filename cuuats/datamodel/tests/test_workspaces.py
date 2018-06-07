@@ -7,10 +7,6 @@ def setUpModule():
     WorkspaceFixture.setUpModule()
 
 
-def tearDownModule():
-    WorkspaceFixture.tearDownModule()
-
-
 class TestWorkspace(WorkspaceFixture, unittest.TestCase):
 
     def test_get_attachment_info(self):
