@@ -43,6 +43,20 @@ class TestForiegnKey(WorkspaceFixture, unittest.TestCase):
                 warehouse_id, fk_value,
                 'foreign key value has the wrong ID')
 
+    def test_foreign_key_prefetch(self):
+        for widget in list(self.cls.objects.prefetch_related('warehouse_id')):
+            prefetched = widget._prefetch_cache[self.FK_FIELD]
+            warehouse_id = getattr(prefetched, self.PK_FIELD)
+
+            self.assertTrue(
+                isinstance(prefetched, self.related_cls),
+                'prefetched foreign key value is not an instance '
+                'of the related class')
+
+            self.assertEqual(
+                warehouse_id, self.FK_VALUES[widget.OBJECTID - 1],
+                'prefetched foreign key value has the wrong ID')
+
     def test_foreign_key_query(self):
         widgets = list(self.cls.objects.filter(warehouse_id=2))
         self.assertEqual(
@@ -65,6 +79,20 @@ class TestForiegnKey(WorkspaceFixture, unittest.TestCase):
                 self.assertEqual(
                     pk_value, self.FK_VALUES[widget.OBJECTID - 1],
                     'related manager value has the wrong ID')
+
+    def test_related_manager_prefetch(self):
+        for warehouse in list(
+                self.related_cls.objects.prefetch_related('widget_set')):
+            for widget in warehouse._prefetch_cache['widget_set']:
+                self.assertTrue(
+                    isinstance(widget, self.cls),
+                    'prefetched related manager value is not an instance '
+                    'of the class')
+
+                self.assertEqual(
+                    getattr(warehouse, self.PK_FIELD),
+                    self.FK_VALUES[widget.OBJECTID - 1],
+                    'prefetched related manager value has the wrong ID')
 
     def test_related_manager_query(self):
         warehouses = list(
