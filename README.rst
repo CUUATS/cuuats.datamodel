@@ -19,4 +19,5 @@ Credits
 -------
 
 CUUATS Data Model was developed by Matt Yoder for the Champaign Urbana
-Urbanized Area Transportation Study (CUUATS).
+Urbanized Area Transportation Study (CUUATS). The many-to-many field was
+developed by Edmond Lai.
