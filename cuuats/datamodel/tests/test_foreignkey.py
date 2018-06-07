@@ -43,6 +43,16 @@ class TestForiegnKey(WorkspaceFixture, unittest.TestCase):
                 warehouse_id, fk_value,
                 'foreign key value has the wrong ID')
 
+    def test_foreign_key_query(self):
+        widgets = list(self.cls.objects.filter(warehouse_id=2))
+        self.assertEqual(
+            len(widgets), 1,
+            'wrong number of objects returned in foreign key query')
+
+        self.assertEqual(
+            widgets[0].OBJECTID, 3,
+            'foreign key query returns the wrong object')
+
     def test_related_manager_lookup(self):
         for pk_value in (1, 2):
             warehouse = self.related_cls.objects.get(OBJECTID=pk_value)
@@ -55,3 +65,14 @@ class TestForiegnKey(WorkspaceFixture, unittest.TestCase):
                 self.assertEqual(
                     pk_value, self.FK_VALUES[widget.OBJECTID - 1],
                     'related manager value has the wrong ID')
+
+    def test_related_manager_query(self):
+        warehouses = list(
+            self.related_cls.objects.filter(widget_set__OBJECTID=1))
+        self.assertEqual(
+            len(warehouses), 1,
+            'wrong number of objects returned in related manager query')
+
+        self.assertEqual(
+            warehouses[0].OBJECTID, 1,
+            'related manager query returns the wrong object')
