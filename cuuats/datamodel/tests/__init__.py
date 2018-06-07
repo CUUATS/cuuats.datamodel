@@ -2,6 +2,7 @@ import unittest
 from .test_domains import TestCodedValue, TestDescription
 from .test_features import TestFeature, TestRegisterFeature
 from .test_fields import TestFields
+from .test_foreignkey import TestForiegnKey
 from .test_manytomany import TestManyToManyField
 from .test_query import TestQuerySet
 from .test_scales import TestBreaksScale, TestDictScale
@@ -15,6 +16,7 @@ def test_suite():
         TestFeature(),
         TestRegisterFeature(),
         TestFields(),
+        TestForiegnKey(),
         TestManyToManyField(),
         TestQuerySet(),
         TestBreaksScale(),
