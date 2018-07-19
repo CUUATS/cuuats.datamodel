@@ -16,3 +16,8 @@ class Singleton(type):
             cls._instances[cls] = super(Singleton, cls).__call__(
                 *args, **kwargs)
         return cls._instances[cls]
+
+
+def batches(items, batch_size):
+    for i in xrange(0, len(items), batch_size):
+        yield items[i:i + batch_size]

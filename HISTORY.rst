@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.3.0 (unreleased)
+------------------
+
+* Prefetch related rows in batches.
+
 0.2.0 (2018-06-07)
 ------------------
 

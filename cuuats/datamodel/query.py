@@ -4,6 +4,7 @@ from cuuats.datamodel.exceptions import ObjectDoesNotExist, \
     MultipleObjectsReturned
 from cuuats.datamodel.field_values import DeferredValue
 from cuuats.datamodel.domains import D
+from cuuats.datamodel.utils import batches
 
 
 class SQLCondition(object):
@@ -320,6 +321,7 @@ class Query(object):
 
 
 class QuerySet(object):
+    PREFETCH_BATCH_SIZE = 1000
 
     def __init__(self, feature_class, query=None):
         self.feature_class = feature_class
@@ -378,12 +380,13 @@ class QuerySet(object):
         destination = rel.destination_class
 
         pk_filter = '%s__in' % (rel.foreign_key,)
-        pks = [getattr(f, rel.primary_key) for f in self._cache]
-        dest_features = destination.objects.filter({pk_filter: pks})
-
+        all_pks = [getattr(f, rel.primary_key) for f in self._cache]
         dest_map = defaultdict(list)
-        for feature in dest_features:
-            dest_map[feature.values.get(rel.foreign_key)].append(feature)
+
+        for pks in batches(all_pks, self.PREFETCH_BATCH_SIZE):
+            dest_features = destination.objects.filter({pk_filter: pks})
+            for feature in dest_features:
+                dest_map[feature.values.get(rel.foreign_key)].append(feature)
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = dest_map[
@@ -394,12 +397,14 @@ class QuerySet(object):
         origin = rel.origin_class
 
         fk_filter = '%s__in' % (rel.primary_key,)
-        fks = [f.values.get(rel_name, None) for f in self._cache]
-        fks = [fk for fk in fks if fk is not None]
-        origin_features = origin.objects.filter({fk_filter: fks})
+        all_fks = [f.values.get(rel_name, None) for f in self._cache]
+        all_fks = [fk for fk in all_fks if fk is not None]
+        origin_map = {}
 
-        origin_map = dict(
-            [(getattr(f, rel.primary_key), f) for f in origin_features])
+        for fks in batches(all_fks, self.PREFETCH_BATCH_SIZE):
+            origin_features = origin.objects.filter({fk_filter: fks})
+            origin_map.update(
+                [(getattr(f, rel.primary_key), f) for f in origin_features])
 
         for feature in self._cache:
             feature._prefetch_cache[rel_name] = origin_map.get(
